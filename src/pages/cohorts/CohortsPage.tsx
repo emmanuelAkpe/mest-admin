@@ -58,7 +58,7 @@ export function CohortsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {(data as unknown as { cohorts: Cohort[] }).cohorts?.map((cohort) => (
-                <tr key={cohort._id} className="hover:bg-slate-50">
+                <tr key={cohort.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {cohort.name}
                   </td>

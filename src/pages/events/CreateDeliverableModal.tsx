@@ -41,7 +41,7 @@ export function CreateDeliverableModal({ eventId, onClose }: Props) {
     queryFn: () => teamsApi.listByEvent(eventId),
     staleTime: 60_000,
   })
-  const rawTeams = (teamsData?.data as { data?: Team[] })?.data ?? []
+  const rawTeams = teamsData?.data?.data?.teams ?? []
   const teamCount: number = Array.isArray(rawTeams) ? rawTeams.length : 0
 
   const toggleType = (type: SubmissionFileType) => {

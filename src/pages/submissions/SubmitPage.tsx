@@ -510,17 +510,8 @@ export function SubmitPage() {
     enabled: !!accessToken && !!token,
   })
 
-  const linkRaw = linkData?.data
-  const link: SubmissionLink | null =
-    linkRaw && 'token' in (linkRaw as object)
-      ? (linkRaw as SubmissionLink)
-      : (linkRaw as { data?: SubmissionLink })?.data ?? null
-
-  const portalRaw = portalResp?.data
-  const portal: PortalData | null =
-    portalRaw && 'team' in (portalRaw as object)
-      ? (portalRaw as PortalData)
-      : (portalRaw as { data?: PortalData })?.data ?? null
+  const link: SubmissionLink | null = linkData?.data?.data ?? null
+  const portal: PortalData | null = portalResp?.data?.data ?? null
 
   // Seed active submissions from portal once loaded
   useEffect(() => {

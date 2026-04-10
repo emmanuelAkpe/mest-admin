@@ -481,7 +481,7 @@ function KpiPanel({ eventId }: { eventId: string }) {
     queryFn: () => kpisApi.listByEvent(eventId),
   })
 
-  const rawKpis = (data?.data as { data?: Kpi[] })?.data ?? []
+  const rawKpis = data?.data?.data?.kpis ?? []
   const kpis: Kpi[] = Array.isArray(rawKpis) ? rawKpis : []
 
   const { mutate: deleteKpi } = useMutation({
@@ -1181,7 +1181,7 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
     queryFn: () => evaluationLinksApi.listByEvent(eventId),
     staleTime: 30_000,
   })
-  const rawLinks = (linksData?.data as { data?: EvaluationLink[] })?.data ?? []
+  const rawLinks = linksData?.data?.data?.links ?? []
   const links: EvaluationLink[] = Array.isArray(rawLinks) ? rawLinks : []
 
   const { data: resultsData, isLoading: resultsLoading } = useQuery({

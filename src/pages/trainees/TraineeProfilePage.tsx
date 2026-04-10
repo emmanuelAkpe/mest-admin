@@ -75,7 +75,7 @@ function SkillsRadar({ trainee }: { trainee: Trainee }) {
               tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
             />
             <Tooltip
-              formatter={(v: number) => [`${v}%`, 'Score']}
+              formatter={(v) => [`${v ?? 0}%`, 'Score'] as [string, string]}
               contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
             />
             <Radar
@@ -696,7 +696,7 @@ export function TraineeProfilePage() {
     typeof c.team === 'object' ? c.team.id : c.team
   )).size
 
-  const trainee: Trainee | undefined = (data?.data as { data?: Trainee })?.data
+  const trainee: Trainee | undefined = data?.data?.data?.trainee
   const cohort = trainee?.cohort as Cohort | undefined
 
   if (isLoading) return <ProfileSkeleton />
