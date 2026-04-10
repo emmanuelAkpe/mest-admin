@@ -30,17 +30,23 @@ import {
   Trophy,
   ChevronDown,
   ChevronUp,
+  Bell,
+  Download,
+  LayoutGrid,
 } from 'lucide-react'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { eventsApi } from '@/api/events'
 import { teamsApi } from '@/api/teams'
 import { kpisApi, type CreateKpiPayload } from '@/api/kpis'
 import { evaluationLinksApi, type EvalInsightContent } from '@/api/evaluationLinks'
+import { deliverablesApi } from '@/api/deliverables'
+import { exportsApi } from '@/api/exports'
 import { useCohortStore } from '@/store/cohort'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { CreateEventModal } from './CreateEventModal'
 import { GenerateEvaluationLinkModal } from './GenerateEvaluationLinkModal'
-import type { Event, EventStatus, EventType, Team, TeamStatus, Kpi, ScaleType, KpiAppliesTo, EvaluationLink, EvaluationLinkStatus } from '@/types'
+import { CreateDeliverableModal } from './CreateDeliverableModal'
+import type { Event, EventStatus, EventType, Team, TeamStatus, Kpi, ScaleType, KpiAppliesTo, EvaluationLink, EvaluationLinkStatus, Deliverable, SubmissionLink, Cohort } from '@/types'
 
 const TEAL = '#0d968b'
 
@@ -746,15 +752,402 @@ function KpiForm({
 }
 
 /* ══════════════════════════════════════════════
+   DELIVERABLES PANEL
+══════════════════════════════════════════════ */
+
+function SubmissionStatusBadge({ status }: { status: string }) {
+  if (status === 'submitted') return <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600">Submitted</span>
+  if (status === 'late') return <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase text-red-500">Late</span>
+  return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">Pending</span>
+}
+
+function DeliverableCard({ deliverable, eventId }: { deliverable: Deliverable; eventId: string }) {
+  const queryClient = useQueryClient()
+  const [expanded, setExpanded] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const [copiedToken, setCopiedToken] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [remindSent, setRemindSent] = useState(false)
+
+  const links: SubmissionLink[] = (deliverable.submissionLinks ?? []) as SubmissionLink[]
+  const submitted = links.filter(l => l.status === 'submitted').length
+  const deadline = parseISO(deliverable.deadline)
+  const daysLeft = differenceInDays(deadline, new Date())
+  const isOverdue = daysLeft < 0
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deliverablesApi.delete(deliverable.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['deliverables', eventId] }),
+  })
+
+  const reviewMutation = useMutation({
+    mutationFn: () => deliverablesApi.generateReview(deliverable.id),
+    onSuccess: () => {
+      setReviewing(false)
+      queryClient.invalidateQueries({ queryKey: ['deliverables', eventId] })
+    },
+    onError: () => setReviewing(false),
+  })
+
+  const reminderMutation = useMutation({
+    mutationFn: () => deliverablesApi.sendReminders(deliverable.id),
+    onSuccess: () => { setRemindSent(true); setTimeout(() => setRemindSent(false), 4000) },
+  })
+
+  const handleReview = () => {
+    setReviewing(true)
+    reviewMutation.mutate()
+  }
+
+  const copyLink = (token: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/submit/${token}`)
+    setCopiedToken(token)
+    setTimeout(() => setCopiedToken(null), 2000)
+  }
+
+  const review = deliverable.aiReview
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      {/* Card header */}
+      <div className="px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-slate-900 truncate">{deliverable.title}</h3>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isOverdue ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'}`}>
+                {isOverdue ? `${Math.abs(daysLeft)}d overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft}d left`}
+              </span>
+            </div>
+            {deliverable.description && (
+              <p className="mt-1 text-xs text-slate-500 line-clamp-1">{deliverable.description}</p>
+            )}
+            <div className="mt-2 flex flex-wrap gap-1">
+              {deliverable.acceptedTypes.map(t => (
+                <span key={t} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{t}</span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => reminderMutation.mutate()}
+              disabled={reminderMutation.isPending || remindSent || isOverdue}
+              title={isOverdue ? 'Deadline has passed' : 'Email teams with no submissions'}
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-amber-300 hover:text-amber-600 disabled:opacity-50"
+            >
+              <Bell className="h-3 w-3" />
+              {reminderMutation.isPending ? 'Sending…' : remindSent ? 'Sent!' : 'Remind'}
+            </button>
+            <button
+              onClick={handleReview}
+              disabled={reviewing || reviewMutation.isPending}
+              className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#0d968b] hover:text-[#0d968b] disabled:opacity-50"
+            >
+              <Sparkles className="h-3 w-3" />
+              {reviewing || reviewMutation.isPending ? 'Reviewing…' : review ? 'Re-review' : 'AI Review'}
+            </button>
+            {!confirmDelete ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-lg border border-slate-200 p-1.5 text-slate-400 transition-colors hover:border-red-200 hover:text-red-500"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                  className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                >
+                  {deleteMutation.isPending ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button onClick={() => setConfirmDelete(false)} className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {links.length > 0 && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-slate-500">{submitted} / {links.length} teams submitted</span>
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {expanded ? 'Hide' : 'Show'} teams
+              </button>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${(submitted / links.length) * 100}%`, backgroundColor: '#0d968b' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Team list */}
+      {expanded && links.length > 0 && (
+        <div className="border-t border-slate-100 divide-y divide-slate-50">
+          {links.map((link) => {
+            const teamName = typeof link.team === 'object' ? link.team.name : 'Team'
+            return (
+              <div key={link.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <SubmissionStatusBadge status={link.status} />
+                  <span className="text-sm font-medium text-slate-700 truncate">{teamName}</span>
+                  {link.submissions?.length > 0 && (
+                    <span className="text-xs text-slate-400">{link.submissions.length} file{link.submissions.length !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => copyLink(link.token)}
+                  className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-500 transition-colors hover:border-[#0d968b] hover:text-[#0d968b]"
+                >
+                  {copiedToken === link.token ? <CheckCheck className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {copiedToken === link.token ? 'Copied' : 'Copy link'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* AI Review results */}
+      {review && (
+        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" style={{ color: '#0d968b' }} />
+              <span className="text-sm font-bold text-slate-900">AI Review</span>
+            </div>
+            <span className="text-xs text-slate-400">
+              {format(parseISO(review.generatedAt), 'MMM d, yyyy · h:mm a')} · {review.model}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {review.teams.map((t) => (
+              <div key={t.teamId} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-sm text-slate-900">{t.teamName}</span>
+                  <div className="flex items-center gap-2">
+                    {t.noContentWarning && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">No content</span>
+                    )}
+                    {t.score !== null && (
+                      <span
+                        className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white"
+                        style={{ backgroundColor: t.score >= 7 ? '#0d968b' : t.score >= 5 ? '#f59e0b' : '#ef4444' }}
+                      >
+                        {t.score}/10
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {t.summary && <p className="text-xs text-slate-600 mb-3">{t.summary}</p>}
+                {t.strengths.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Strengths</p>
+                    <ul className="space-y-0.5">
+                      {t.strengths.map((s, i) => <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600"><TrendingUp className="h-3 w-3 text-emerald-500 mt-0.5 shrink-0" />{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {t.improvements.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">To improve</p>
+                    <ul className="space-y-0.5">
+                      {t.improvements.map((s, i) => <li key={i} className="flex items-start gap-1.5 text-xs text-slate-600"><Lightbulb className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {t.redFlags.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">Red flags</p>
+                    <ul className="space-y-0.5">
+                      {t.redFlags.map((s, i) => <li key={i} className="flex items-start gap-1.5 text-xs text-red-600"><AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SubmissionMatrix({ deliverables }: { deliverables: Deliverable[] }) {
+  const teamMap = new Map<string, string>()
+  const statusMap: Record<string, Record<string, string>> = {}
+
+  for (const d of deliverables) {
+    for (const link of (d.submissionLinks ?? []) as SubmissionLink[]) {
+      const tid = typeof link.team === 'object' ? (link.team as Team).id : String(link.team)
+      const tname = typeof link.team === 'object' ? (link.team as Team).name : 'Team'
+      if (tid) {
+        teamMap.set(tid, tname)
+        if (!statusMap[tid]) statusMap[tid] = {}
+        statusMap[tid][d.id] = link.status
+      }
+    }
+  }
+
+  const teams = Array.from(teamMap.entries())
+
+  if (teams.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center">
+        <p className="text-sm text-slate-400">No team data available — create a deliverable first.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-slate-100 bg-slate-50">
+            <th className="sticky left-0 z-10 bg-slate-50 px-4 py-3 text-left text-xs font-semibold text-slate-500">Team</th>
+            {deliverables.map((d) => (
+              <th key={d.id} className="px-3 py-3 text-center font-semibold text-slate-700">
+                <div className="truncate max-w-[120px] mx-auto">{d.title}</div>
+                <div className="text-[10px] font-normal text-slate-400 mt-0.5">{format(parseISO(d.deadline), 'MMM d')}</div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {teams.map(([tid, tname]) => (
+            <tr key={tid} className="hover:bg-slate-50 transition-colors">
+              <td className="sticky left-0 z-10 bg-white px-4 py-3 font-medium text-slate-800 whitespace-nowrap hover:bg-slate-50">{tname}</td>
+              {deliverables.map((d) => {
+                const status = statusMap[tid]?.[d.id] ?? 'not_submitted'
+                return (
+                  <td key={d.id} className="px-3 py-3 text-center">
+                    <SubmissionStatusBadge status={status} />
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function DeliverablesPanel({ eventId }: { eventId: string }) {
+  const [showCreate, setShowCreate] = useState(false)
+  const [view, setView] = useState<'cards' | 'matrix'>('cards')
+  const [downloading, setDownloading] = useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['deliverables', eventId],
+    queryFn: () => deliverablesApi.listByEvent(eventId),
+    staleTime: 30_000,
+  })
+
+  const rawData = data?.data
+  const deliverables: Deliverable[] = Array.isArray(rawData) ? rawData : ((rawData as { data?: Deliverable[] })?.data ?? [])
+
+  const handleExport = async () => {
+    setDownloading(true)
+    try { await exportsApi.submissions(eventId) } finally { setDownloading(false) }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-slate-900">Deliverables</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Submission requirements for all teams</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {deliverables.length > 0 && (
+            <>
+              {/* View toggle */}
+              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                <button
+                  onClick={() => setView('cards')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${view === 'cards' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                  title="Card view"
+                >
+                  <ListChecks className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setView('matrix')}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all ${view === 'matrix' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+                  title="Matrix view"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <button
+                onClick={handleExport}
+                disabled={downloading}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {downloading ? 'Exporting…' : 'Export CSV'}
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition-colors"
+            style={{ backgroundColor: '#0d968b' }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Deliverable
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+        </div>
+      ) : deliverables.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 py-12 text-center">
+          <ListChecks className="mb-2 h-8 w-8 text-slate-200" />
+          <p className="text-sm font-medium text-slate-500">No deliverables yet</p>
+          <p className="mt-0.5 text-xs text-slate-400">Create a deliverable to auto-generate submission links for all teams.</p>
+        </div>
+      ) : view === 'matrix' ? (
+        <SubmissionMatrix deliverables={deliverables} />
+      ) : (
+        <div className="space-y-4">
+          {deliverables.map(d => (
+            <DeliverableCard key={d.id} deliverable={d} eventId={eventId} />
+          ))}
+        </div>
+      )}
+
+      {showCreate && <CreateDeliverableModal eventId={eventId} onClose={() => setShowCreate(false)} />}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════
    SESSION VIEW
 ══════════════════════════════════════════════ */
-type SessionTab = 'overview' | 'teams' | 'kpis' | 'evaluations'
+type SessionTab = 'overview' | 'teams' | 'kpis' | 'evaluations' | 'deliverables'
 
 const SESSION_TABS: { id: SessionTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'overview',    label: 'Overview',       icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
-  { id: 'teams',       label: 'Teams',          icon: <Users className="h-3.5 w-3.5" /> },
-  { id: 'kpis',        label: 'KPI Framework',  icon: <BarChart2 className="h-3.5 w-3.5" /> },
-  { id: 'evaluations', label: 'Evaluations',    icon: <Link2 className="h-3.5 w-3.5" /> },
+  { id: 'overview',     label: 'Overview',       icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
+  { id: 'teams',        label: 'Teams',          icon: <Users className="h-3.5 w-3.5" /> },
+  { id: 'kpis',         label: 'KPI Framework',  icon: <BarChart2 className="h-3.5 w-3.5" /> },
+  { id: 'evaluations',  label: 'Evaluations',    icon: <Link2 className="h-3.5 w-3.5" /> },
+  { id: 'deliverables', label: 'Deliverables',   icon: <ListChecks className="h-3.5 w-3.5" /> },
 ]
 
 /* ── Evaluation status badge ── */
@@ -781,6 +1174,7 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [resendError, setResendError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'links' | 'results' | 'insights'>('links')
+  const [exportingEvals, setExportingEvals] = useState(false)
 
   const { data: linksData, isLoading: linksLoading } = useQuery({
     queryKey: ['eval-links', eventId],
@@ -988,6 +1382,18 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
 
       {activeView === 'results' && (
         <div className="space-y-5">
+          {!resultsLoading && results && results.teamResults.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={async () => { setExportingEvals(true); try { await exportsApi.evaluations(eventId) } finally { setExportingEvals(false) } }}
+                disabled={exportingEvals}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {exportingEvals ? 'Exporting…' : 'Export CSV'}
+              </button>
+            </div>
+          )}
           {resultsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
@@ -1509,6 +1915,8 @@ function SessionDetailView({
     </div>
   )
 
+  const cohortId = typeof event.cohort === 'object' ? (event.cohort as Cohort).id : event.cohort
+
   const teamsTab = (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -1520,13 +1928,24 @@ function SessionDetailView({
             </span>
           )}
         </div>
-        <button
-          onClick={() => navigate('/teams')}
-          className="text-sm font-medium transition-colors hover:underline"
-          style={{ color: TEAL }}
-        >
-          Manage Teams
-        </button>
+        <div className="flex items-center gap-2">
+          {teams.length > 0 && cohortId && (
+            <button
+              onClick={() => exportsApi.trainees(cohortId)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+              title="Export trainee roster as CSV"
+            >
+              <Download className="h-3.5 w-3.5" /> Export Trainees
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/teams')}
+            className="text-sm font-medium transition-colors hover:underline"
+            style={{ color: TEAL }}
+          >
+            Manage Teams
+          </button>
+        </div>
       </div>
 
       {teamsLoading ? (
@@ -1678,10 +2097,11 @@ function SessionDetailView({
       </div>
 
       {/* Tab content */}
-      {activeTab === 'overview'    && overviewTab}
-      {activeTab === 'teams'       && teamsTab}
-      {activeTab === 'kpis'        && kpisTab}
-      {activeTab === 'evaluations' && evaluationsTab}
+      {activeTab === 'overview'     && overviewTab}
+      {activeTab === 'teams'        && teamsTab}
+      {activeTab === 'kpis'         && kpisTab}
+      {activeTab === 'evaluations'  && evaluationsTab}
+      {activeTab === 'deliverables' && <DeliverablesPanel eventId={event.id} />}
     </div>
   )
 }

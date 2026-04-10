@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { X, Search, UserPlus, AlertCircle } from 'lucide-react'
+import { X, Search, UserPlus } from 'lucide-react'
 import { traineesApi } from '@/api/trainees'
-import { teamsApi } from '@/api/teams'
+import { teamsApi } from '@/api/teams' // still needed for the update mutation
 import { useCohortStore } from '@/store/cohort'
 import { AvatarWithFallback } from '@/components/ui/Avatar'
 import { countryFlag } from '@/lib/countryFlag'
@@ -23,63 +23,38 @@ const ROLE_LABELS: Record<TeamMemberRole, string> = {
 interface Props {
   team: Team
   onClose: () => void
+  takenTraineeIds: Set<string>
 }
 
-export function AddMemberModal({ team, onClose }: Props) {
+export function AddMemberModal({ team, onClose, takenTraineeIds }: Props) {
   const { activeCohortId } = useCohortStore()
   const queryClient = useQueryClient()
-  const eventId = typeof team.event === 'object' ? team.event.id : team.event
 
   const [search, setSearch] = useState('')
   const [selectedTraineeId, setSelectedTraineeId] = useState<string | null>(null)
   const [selectedRoles, setSelectedRoles] = useState<TeamMemberRole[]>([])
 
-  // All trainees in the cohort
   const { data: traineesData, isLoading } = useQuery({
     queryKey: ['trainees', activeCohortId],
     queryFn: () => traineesApi.listByCohort(activeCohortId!, { limit: 100 }),
     enabled: !!activeCohortId,
   })
 
-  // All teams for the same event — used to prevent cross-team duplicates
-  const { data: eventTeamsData } = useQuery({
-    queryKey: ['teams', eventId],
-    queryFn: () => teamsApi.listByEvent(eventId!),
-    enabled: !!eventId,
-  })
-
   const allTrainees: Trainee[] = (traineesData?.data as { data?: Trainee[] })?.data ?? []
 
-  const rawEventTeams = (eventTeamsData?.data as { data?: Team[] | { teams?: Team[] } })?.data
-  const eventTeams: Team[] = Array.isArray(rawEventTeams)
-    ? (rawEventTeams as Team[])
-    : (rawEventTeams as { teams?: Team[] })?.teams ?? []
-
-  // Map traineeId → team name for trainees already in another team this event
-  const takenByTeam = new Map<string, string>()
-  eventTeams
-    .filter((t) => t.id !== team.id)
-    .forEach((t) => {
-      t.members.forEach((m) => {
-        const tid = typeof m.trainee === 'object' ? m.trainee.id : m.trainee
-        if (tid) takenByTeam.set(tid, t.name)
-      })
-    })
-
-  // Trainees already in THIS team
   const inThisTeam = new Set(
-    team.members.map((m) => (typeof m.trainee === 'object' ? m.trainee.id : m.trainee))
+    team.members.map((m) => {
+      const t = m.trainee
+      if (typeof t === 'string') return t
+      return (t as { id?: string; _id?: string }).id || (t as { id?: string; _id?: string })._id || ''
+    })
   )
 
-  const available = allTrainees
-    .filter((t) => !inThisTeam.has(t.id))
+  const freeTrainees = allTrainees
+    .filter((t) => !inThisTeam.has(t.id) && !takenTraineeIds.has(t.id))
     .filter((t) =>
       `${t.firstName} ${t.lastName}`.toLowerCase().includes(search.toLowerCase())
     )
-
-  // Separate: free trainees vs those locked in another team
-  const freeTrainees = available.filter((t) => !takenByTeam.has(t.id))
-  const takenTrainees = available.filter((t) => takenByTeam.has(t.id))
 
   const selectedTrainee = allTrainees.find((t) => t.id === selectedTraineeId)
 
@@ -92,12 +67,6 @@ export function AddMemberModal({ team, onClose }: Props) {
         roles: m.roles,
       }))
       await teamsApi.update(team.id, { members: [...existing, newMember] })
-      // Fire-and-forget — ignore 404 if backend hasn't implemented the route yet
-      teamsApi.logMemberChange(team.id, {
-        trainee: newMember.trainee,
-        changeType: 'joined',
-        newRoles: newMember.roles,
-      }).catch(() => {})
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team', team.id] })
@@ -161,13 +130,12 @@ export function AddMemberModal({ team, onClose }: Props) {
                   <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100" />
                 ))}
               </div>
-            ) : freeTrainees.length === 0 && takenTrainees.length === 0 ? (
+            ) : freeTrainees.length === 0 ? (
               <p className="py-4 text-center text-sm italic text-slate-400">
-                {search ? 'No trainees match your search.' : 'All trainees are already in this team.'}
+                {search ? 'No trainees match your search.' : 'All trainees are already assigned to teams for this event.'}
               </p>
             ) : (
               <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
-                {/* Free trainees — selectable */}
                 {freeTrainees.map((t) => {
                   const name = `${t.firstName} ${t.lastName}`
                   const isSelected = selectedTraineeId === t.id
@@ -200,48 +168,6 @@ export function AddMemberModal({ team, onClose }: Props) {
                     </button>
                   )
                 })}
-
-                {/* Taken trainees — grayed out with team name */}
-                {takenTrainees.length > 0 && (
-                  <>
-                    {freeTrainees.length > 0 && (
-                      <div className="bg-slate-50 px-4 py-2">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                          Already in another team
-                        </p>
-                      </div>
-                    )}
-                    {takenTrainees.map((t) => {
-                      const name = `${t.firstName} ${t.lastName}`
-                      return (
-                        <div
-                          key={t.id}
-                          className="flex w-full items-center gap-3 px-4 py-3 opacity-50 cursor-not-allowed"
-                        >
-                          <div className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-slate-200" />
-                          <AvatarWithFallback src={t.photo} name={name} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-slate-600">{name}</p>
-                            <p className="truncate text-xs text-slate-400">{countryFlag(t.country)} {t.country}</p>
-                          </div>
-                          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-                            {takenByTeam.get(t.id)}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Info notice */}
-            {takenTrainees.length > 0 && freeTrainees.length === 0 && !search && (
-              <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                <p className="text-xs text-amber-700">
-                  All available trainees are already in other teams for this event. A trainee can only be in one team per event.
-                </p>
               </div>
             )}
           </div>

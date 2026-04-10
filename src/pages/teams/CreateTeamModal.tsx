@@ -35,16 +35,18 @@ interface MemberEntry {
 interface Props {
   eventId: string
   onClose: () => void
+  initialMembers?: MemberEntry[]
+  takenTraineeIds?: Set<string>
 }
 
-export function CreateTeamModal({ eventId, onClose }: Props) {
+export function CreateTeamModal({ eventId, onClose, initialMembers = [], takenTraineeIds = new Set() }: Props) {
   const { activeCohortId } = useCohortStore()
   const queryClient = useQueryClient()
 
   const [name, setName] = useState('')
   const [productIdea, setProductIdea] = useState('')
   const [marketFocus, setMarketFocus] = useState('')
-  const [members, setMembers] = useState<MemberEntry[]>([])
+  const [members, setMembers] = useState<MemberEntry[]>(initialMembers)
   const [search, setSearch] = useState('')
 
   const { data: traineesData, isLoading: traineesLoading } = useQuery({
@@ -58,12 +60,13 @@ export function CreateTeamModal({ eventId, onClose }: Props) {
     ? (traineesRaw as Trainee[])
     : ((traineesRaw as { data?: Trainee[] })?.data ?? [])
 
+  const isChecked = (traineeId: string) => members.some((m) => m.trainee === traineeId)
+
   const filteredTrainees = allTrainees.filter((t) => {
+    if (takenTraineeIds.has(t.id) && !isChecked(t.id)) return false
     const full = `${t.firstName} ${t.lastName}`.toLowerCase()
     return full.includes(search.toLowerCase())
   })
-
-  const isChecked = (traineeId: string) => members.some((m) => m.trainee === traineeId)
 
   const toggleTrainee = (traineeId: string) => {
     if (isChecked(traineeId)) {

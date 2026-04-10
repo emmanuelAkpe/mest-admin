@@ -46,4 +46,10 @@ export const teamsApi = {
     api.get<ApiResponse<MemberChange[]>>(`/teams/${teamId}/member-changes`),
   logMemberChange: (teamId: string, payload: { trainee: string; changeType: 'joined' | 'left' | 'role_changed'; previousRoles?: TeamMemberRole[]; newRoles?: TeamMemberRole[]; reason?: string; destinationTeam?: string }) =>
     api.post<ApiResponse<MemberChange>>(`/teams/${teamId}/member-changes`, payload),
+
+  sendProfileLink: (id: string) =>
+    api.post(`/teams/${id}/profile-link`),
+
+  revokeProfileLink: (id: string) =>
+    api.delete(`/teams/${id}/profile-link`),
 }

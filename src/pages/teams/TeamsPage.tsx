@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Users, Target, Plus, Search, GitBranch, ArrowRight, Network, ChevronRight, UserX } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Users, Target, Plus, Search, GitBranch, ArrowRight, Network, ChevronRight, UserX, Send, Check, Loader2, UserPlus } from 'lucide-react'
 import { teamsApi } from '@/api/teams'
 import { eventsApi } from '@/api/events'
 import { traineesApi } from '@/api/trainees'
@@ -58,6 +58,12 @@ function TeamCard({ team }: { team: Team }) {
   const displayMembers = team.members.slice(0, 5)
   const extraCount = team.members.length - 5
   const accent = STATUS_ACCENT[team.status]
+  const [linkSent, setLinkSent] = useState(false)
+
+  const { mutate: sendLink, isPending: isSendingLink } = useMutation({
+    mutationFn: () => teamsApi.sendProfileLink(team.id),
+    onSuccess: () => { setLinkSent(true); setTimeout(() => setLinkSent(false), 3000) },
+  })
 
   return (
     <div
@@ -94,7 +100,7 @@ function TeamCard({ team }: { team: Team }) {
               const name = typeof trainee === 'object' ? `${trainee.firstName} ${trainee.lastName}` : 'Member'
               const photo = typeof trainee === 'object' ? trainee.photo : null
               return (
-                <span key={typeof trainee === 'object' ? trainee.id : i} className={i > 0 ? '-ml-2' : ''} style={{ zIndex: displayMembers.length - i, position: 'relative' }}>
+                <span key={typeof trainee === 'object' ? (trainee.id || `m-${i}`) : `m-${i}`} className={i > 0 ? '-ml-2' : ''} style={{ zIndex: displayMembers.length - i, position: 'relative' }}>
                   <AvatarWithFallback src={photo} name={name} size="sm" className="ring-2 ring-white" />
                 </span>
               )
@@ -120,6 +126,16 @@ function TeamCard({ team }: { team: Team }) {
                 <GitBranch className="h-3 w-3" /> {team.pivots.length}
               </span>
             )}
+            <button
+              onClick={(e) => { e.stopPropagation(); sendLink() }}
+              disabled={isSendingLink || team.isDissolved}
+              title="Send team profile link to team lead"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-40"
+              style={{ color: linkSent ? '#16a34a' : '#0d968b', backgroundColor: linkSent ? '#dcfce7' : '#0d968b1a' }}
+            >
+              {isSendingLink ? <Loader2 className="h-3 w-3 animate-spin" /> : linkSent ? <Check className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+              {linkSent ? 'Sent!' : 'Send Link'}
+            </button>
             <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-[#0d968b] transition-colors">
               View <ArrowRight className="h-3 w-3" />
             </span>
@@ -198,8 +214,12 @@ function toIdString(val: unknown): string {
   return ''
 }
 
-function UnassignedTrainees({ teams, cohortId }: { teams: Team[]; cohortId: string }) {
+function UnassignedTrainees({ teams, cohortId, eventId }: { teams: Team[]; cohortId: string; eventId: string }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [newTeamForTrainee, setNewTeamForTrainee] = useState<string | null>(null)
+
   const { data, isLoading } = useQuery({
     queryKey: ['trainees', cohortId],
     queryFn: () => traineesApi.listByCohort(cohortId, { limit: 100 }),
@@ -210,7 +230,6 @@ function UnassignedTrainees({ teams, cohortId }: { teams: Team[]; cohortId: stri
     ? (traineesRaw as Trainee[])
     : ((traineesRaw as { data?: Trainee[] })?.data ?? [])
 
-  // Build set of assigned trainee IDs from current event's teams
   const assignedIds = new Set<string>()
   for (const team of teams) {
     for (const m of team.members) {
@@ -222,6 +241,24 @@ function UnassignedTrainees({ teams, cohortId }: { teams: Team[]; cohortId: stri
   const unassigned = allTrainees.filter(t => {
     const id = t.id || toIdString(t)
     return id && !assignedIds.has(id)
+  })
+
+  const assignableTeams = teams.filter(t => !t.isDissolved)
+
+  const { mutate: addToTeam, isPending: isAdding } = useMutation({
+    mutationFn: async ({ traineeId, team }: { traineeId: string; team: Team }) => {
+      const existing = team.members.map(m => ({
+        trainee: typeof m.trainee === 'object'
+          ? ((m.trainee as { id?: string; _id?: string }).id || (m.trainee as { id?: string; _id?: string })._id || '')
+          : m.trainee as string,
+        roles: m.roles,
+      }))
+      await teamsApi.update(team.id, { members: [...existing, { trainee: traineeId, roles: [] }] })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', eventId] })
+      setOpenDropdown(null)
+    },
   })
 
   if (isLoading) {
@@ -241,7 +278,7 @@ function UnassignedTrainees({ teams, cohortId }: { teams: Team[]; cohortId: stri
   if (unassigned.length === 0) return null
 
   return (
-    <div className="mt-8 overflow-hidden rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
+    <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
       <div className="flex items-center justify-between border-b border-amber-100 px-5 py-4">
         <div className="flex items-center gap-2">
           <UserX className="h-4 w-4 text-amber-600" />
@@ -254,20 +291,66 @@ function UnassignedTrainees({ teams, cohortId }: { teams: Team[]; cohortId: stri
       </div>
       <div className="divide-y divide-amber-100">
         {unassigned.map(t => (
-          <div
-            key={t.id}
-            onClick={() => navigate(`/trainees/${t.id}`)}
-            className="flex cursor-pointer items-center gap-3 px-5 py-3 transition-colors hover:bg-amber-100/60"
-          >
+          <div key={t.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-amber-100/60">
             <AvatarWithFallback src={t.photo} name={`${t.firstName} ${t.lastName}`} size="sm" />
-            <div className="min-w-0 flex-1">
+            <div
+              className="min-w-0 flex-1 cursor-pointer"
+              onClick={() => navigate(`/trainees/${t.id}`)}
+            >
               <p className="truncate text-sm font-medium text-slate-800">{t.firstName} {t.lastName}</p>
               <p className="text-xs text-slate-500">{t.country}</p>
             </div>
-            <ChevronRight className="h-4 w-4 shrink-0 text-amber-400" />
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === t.id ? null : t.id)}
+                disabled={isAdding}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[#0d968b] bg-[#0d968b1a] transition-colors hover:bg-[#0d968b]/20 disabled:opacity-50"
+              >
+                <UserPlus className="h-3 w-3" />
+                Add to Team
+              </button>
+              {openDropdown === t.id && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                  <div className="absolute right-0 bottom-full z-20 mb-1 w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                    {assignableTeams.map(team => (
+                      <button
+                        key={team.id}
+                        onClick={() => addToTeam({ traineeId: t.id, team })}
+                        disabled={isAdding}
+                        className="w-full truncate px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {team.name}
+                      </button>
+                    ))}
+                    {assignableTeams.length > 0 && <div className="my-1 border-t border-slate-100" />}
+                    <button
+                      onClick={() => { setOpenDropdown(null); setNewTeamForTrainee(t.id) }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[#0d968b] hover:bg-slate-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      New Team
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>
+
+      {newTeamForTrainee && (() => {
+        const takenIds = new Set<string>()
+        teams.forEach(t => t.members.forEach(m => { const id = toIdString(m.trainee); if (id) takenIds.add(id) }))
+        return (
+          <CreateTeamModal
+            eventId={eventId}
+            initialMembers={[{ trainee: newTeamForTrainee, roles: [] }]}
+            takenTraineeIds={takenIds}
+            onClose={() => setNewTeamForTrainee(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -335,41 +418,12 @@ export function TeamsPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Teams</h1>
-          {!teamsLoading && allTeams.length > 0 && (
-            <p className="mt-0.5 text-sm text-slate-500">{allTeams.length} teams · {totalMembers} members</p>
-          )}
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          disabled={!selectedEventId}
-          className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-40"
-          style={{ backgroundColor: TEAL }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = TEAL_DARK)}
-          onMouseLeave={e => (e.currentTarget.style.backgroundColor = TEAL)}
-        >
-          <Plus className="h-4 w-4" />
-          New Team
-        </button>
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-slate-900">Teams</h1>
+        {!teamsLoading && allTeams.length > 0 && (
+          <p className="mt-0.5 text-sm text-slate-500">{allTeams.length} teams · {totalMembers} members</p>
+        )}
       </div>
-
-      {/* Stats strip */}
-      {!teamsLoading && allTeams.length > 0 && (
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          {[
-            { label: 'Total Teams', value: allTeams.length, color: TEAL },
-            { label: 'Active',      value: activeCount,    color: '#16a34a' },
-            { label: 'Completed',   value: completedCount, color: '#2563eb' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
-              <p className="mt-1 text-2xl font-extrabold" style={{ color }}>{value}</p>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Event tabs */}
       {eventsLoading && (
@@ -395,18 +449,47 @@ export function TeamsPage() {
       {/* Teams grid */}
       {selectedEventId && (
         <>
-          {!teamsLoading && allTeams.length > 3 && (
-            <div className="relative mb-5">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search teams by name or product idea…"
-                className="h-10 w-full max-w-sm rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
-              />
+          {/* Stats strip — scoped to selected event */}
+          {!teamsLoading && allTeams.length > 0 && (
+            <div className="mb-5 grid grid-cols-3 gap-3">
+              {[
+                { label: 'Total Teams', value: allTeams.length, color: TEAL },
+                { label: 'Active',      value: activeCount,    color: '#16a34a' },
+                { label: 'Completed',   value: completedCount, color: '#2563eb' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
+                  <p className="mt-1 text-2xl font-extrabold" style={{ color }}>{value}</p>
+                </div>
+              ))}
             </div>
           )}
+
+          {/* Toolbar: search + New Team */}
+          <div className="mb-5 flex items-center gap-3">
+            {!teamsLoading && allTeams.length > 3 && (
+              <div className="relative flex-1 max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search teams by name or product idea…"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
+                />
+              </div>
+            )}
+            <button
+              onClick={() => setShowCreate(true)}
+              className="ml-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+              style={{ backgroundColor: TEAL }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = TEAL_DARK)}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = TEAL)}
+            >
+              <Plus className="h-4 w-4" />
+              New Team
+            </button>
+          </div>
 
           {teamsLoading && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -440,15 +523,17 @@ export function TeamsPage() {
           )}
 
           {/* Unassigned trainees */}
-          {!teamsLoading && activeCohortId && (
-            <UnassignedTrainees key={selectedEventId} teams={allTeams} cohortId={activeCohortId} />
+          {!teamsLoading && activeCohortId && selectedEventId && (
+            <UnassignedTrainees key={selectedEventId} teams={allTeams} cohortId={activeCohortId} eventId={selectedEventId} />
           )}
         </>
       )}
 
-      {showCreate && selectedEventId && (
-        <CreateTeamModal eventId={selectedEventId} onClose={() => setShowCreate(false)} />
-      )}
+      {showCreate && selectedEventId && (() => {
+        const takenIds = new Set<string>()
+        allTeams.forEach(t => t.members.forEach(m => { const id = toIdString(m.trainee); if (id) takenIds.add(id) }))
+        return <CreateTeamModal eventId={selectedEventId} takenTraineeIds={takenIds} onClose={() => setShowCreate(false)} />
+      })()}
     </div>
   )
 }

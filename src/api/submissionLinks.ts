@@ -1,6 +1,6 @@
 import api from './client'
 import publicApi from './publicClient'
-import type { SubmissionLink, SubmissionFileType, SubmissionItem, ApiResponse } from '@/types'
+import type { SubmissionLink, SubmissionFileType, SubmissionItem, PortalData, ApiResponse } from '@/types'
 
 export interface CreateSubmissionLinkPayload {
   teamId: string
@@ -30,7 +30,12 @@ export const submissionLinksApi = {
     publicApi.post<ApiResponse<{ message: string }>>(`/submission-links/public/${token}/request-access`, { email }),
 
   verifyAccess: (token: string, email: string, otp: string) =>
-    publicApi.post<ApiResponse<{ accessToken: string; submitterName: string }>>(`/submission-links/public/${token}/verify-access`, { email, otp }),
+    publicApi.post<ApiResponse<{ accessToken: string; submitterEmail: string }>>(`/submission-links/public/${token}/verify-access`, { email, otp }),
+
+  getTeamPortal: (token: string, accessToken: string) =>
+    publicApi.get<ApiResponse<PortalData>>(`/submission-links/public/${token}/portal`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }),
 
   submit: (token: string, accessToken: string, formData: FormData) =>
     publicApi.post<ApiResponse<SubmissionItem>>(`/submission-links/public/${token}/submissions`, formData, {
@@ -46,4 +51,7 @@ export const submissionLinksApi = {
     publicApi.delete<ApiResponse<void>>(`/submission-links/public/${token}/submissions/${submissionId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     }),
+
+  adminDeleteSubmission: (linkId: string, submissionId: string) =>
+    api.delete<ApiResponse<void>>(`/submission-links/${linkId}/submissions/${submissionId}`),
 }

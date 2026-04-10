@@ -776,15 +776,23 @@ export function TeamProfilePage() {
                   <div className="rounded-lg border border-slate-100 bg-slate-50 divide-y divide-slate-100">
                     {link.submissions.map((sub) => {
                       const meta = FILE_TYPE_META[sub.fileType]
-                      const isLinkType = sub.fileType === 'link' || sub.fileType === 'demo'
                       return (
                         <div key={sub.id} className="flex items-center gap-3 px-3 py-2">
                           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white" style={{ backgroundColor: meta.color }}>{meta.icon}</span>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-medium text-slate-700">{sub.label || sub.filename || (isLinkType ? sub.url : 'File')}</p>
+                            <p className="truncate text-xs font-medium text-slate-700">{sub.label || sub.filename || sub.url}</p>
                             <p className="text-[11px] text-slate-400">by {sub.submittedByEmail} · {timeAgo(sub.submittedAt)}</p>
                           </div>
-                          {isLinkType && <a href={sub.url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-white">Open</a>}
+                          <a href={sub.url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-white">
+                            Open
+                          </a>
+                          <button
+                            onClick={() => submissionLinksApi.adminDeleteSubmission(link.id, sub.id).then(() => queryClient.invalidateQueries({ queryKey: ['submission-links', id] }))}
+                            className="shrink-0 rounded-md p-1 text-slate-300 hover:text-red-400"
+                            title="Remove submission"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       )
                     })}
@@ -1153,9 +1161,13 @@ export function TeamProfilePage() {
       {activeTab === 'feedback'    && feedbackTab}
       {activeTab === 'history'     && historyTab}
 
-      {showAddMember && (
-        <AddMemberModal team={team} onClose={() => setShowAddMember(false)} />
-      )}
+      {showAddMember && (() => {
+        const takenTraineeIds = new Set<string>()
+        allEventTeams.filter(t => extractId(t) !== team.id).forEach(t => {
+          t.members.forEach(m => { const tid = extractId(m.trainee); if (tid) takenTraineeIds.add(tid) })
+        })
+        return <AddMemberModal team={team} takenTraineeIds={takenTraineeIds} onClose={() => setShowAddMember(false)} />
+      })()}
       {showGenerateLink && (
         <GenerateSubmissionLinkModal
           team={team}

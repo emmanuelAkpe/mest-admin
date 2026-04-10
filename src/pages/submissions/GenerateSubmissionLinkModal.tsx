@@ -25,7 +25,9 @@ interface Props {
 }
 
 export function GenerateSubmissionLinkModal({ team, onClose, onSuccess }: Props) {
-  const parentEventId = typeof team.event === 'object' ? team.event.id : team.event
+  const parentEventId = typeof team.event === 'object'
+    ? (team.event.id || (team.event as unknown as { _id?: string })._id || '')
+    : team.event
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -203,11 +205,14 @@ export function GenerateSubmissionLinkModal({ team, onClose, onSuccess }: Props)
                 className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3 pr-8 text-sm outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
               >
                 <option value="">Select a session…</option>
-                {eventOptions.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.name}{sessions.includes(ev) ? '' : ' (Program)'}
-                  </option>
-                ))}
+                {eventOptions.map((ev) => {
+                  const evId = ev.id || (ev as unknown as { _id?: string })._id || ''
+                  return (
+                    <option key={evId} value={evId}>
+                      {ev.name}{sessions.includes(ev) ? '' : ' (Program)'}
+                    </option>
+                  )
+                })}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>

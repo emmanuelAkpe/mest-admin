@@ -1,91 +1,114 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, Network, CalendarDays, BarChart2, LogOut, Bell, ChevronDown, Menu, X } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
-import { useAuthStore } from '@/store/auth'
-import { useCohortStore } from '@/store/cohort'
-import { authApi } from '@/api/auth'
-import { cohortsApi } from '@/api/cohorts'
-import type { Cohort } from '@/types'
-import { MestChat } from '@/components/chat/MestChat'
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Users,
+  Network,
+  CalendarDays,
+  BarChart2,
+  LogOut,
+  ChevronDown,
+  Menu,
+  X,
+  Sparkles,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useAuthStore } from "@/store/auth";
+import { useCohortStore } from "@/store/cohort";
+import { authApi } from "@/api/auth";
+import { cohortsApi } from "@/api/cohorts";
+import type { Cohort } from "@/types";
+import { MestChat } from "@/components/chat/MestChat";
+import { NotificationBell } from "@/components/NotificationBell";
 
-const TEAL = '#0d968b'
+const TEAL = "#0d968b";
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', toCohort: true },
-  { icon: Users, label: 'Trainees', to: '/trainees' },
-  { icon: Network, label: 'Teams', to: '/teams' },
-  { icon: CalendarDays, label: 'Events', to: '/events' },
-  { icon: BarChart2, label: 'Analytics', toAnalytics: true },
-]
+  { icon: LayoutDashboard, label: "Dashboard", toCohort: true },
+  { icon: Users, label: "Trainees", to: "/trainees" },
+  { icon: Network, label: "Teams", to: "/teams" },
+  { icon: CalendarDays, label: "Events", to: "/events" },
+  { icon: BarChart2, label: "Analytics", toAnalytics: true },
+  { icon: Sparkles, label: "AI Manager", toProgrammeManager: true },
+];
 
 export function AppLayout() {
-  const { admin, clearAuth } = useAuthStore()
-  const { activeCohortId, setActiveCohort, clearActiveCohort } = useCohortStore()
-  const navigate = useNavigate()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { admin, clearAuth } = useAuthStore();
+  const { activeCohortId, setActiveCohort, clearActiveCohort } =
+    useCohortStore();
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { data: cohortsRes } = useQuery({
-    queryKey: ['cohorts'],
+    queryKey: ["cohorts"],
     queryFn: () => cohortsApi.list({ limit: 50 }),
-  })
-  const cohorts: Cohort[] = (cohortsRes?.data as { data?: Cohort[] })?.data ?? []
+  });
+  const cohorts: Cohort[] =
+    (cohortsRes?.data as { data?: Cohort[] })?.data ?? [];
 
   const handleLogout = async () => {
     try {
-      await authApi.logout()
+      await authApi.logout();
     } finally {
-      clearAuth()
-      clearActiveCohort()
-      navigate('/login')
+      clearAuth();
+      clearActiveCohort();
+      navigate("/login");
     }
-  }
+  };
 
   const initials = admin
     ? `${admin.firstName[0]}${admin.lastName[0]}`.toUpperCase()
-    : '?'
+    : "?";
 
   const SidebarContent = () => (
     <>
       <div className="p-6">
-        <div className="mb-8 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg text-white" style={{ backgroundColor: TEAL }}>
-            <img src="/logo.png" alt="MEST" className="h-5 w-5 object-contain brightness-0 invert" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold leading-none text-slate-900">Command Center</h1>
-            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-400">Facilitator Portal</p>
-          </div>
+        <div className="mb-8">
+          <img
+            src="/logo.png"
+            alt="MEST"
+            className="h-5 w-auto object-contain"
+          />
         </div>
 
         <nav className="space-y-1">
-          {navItems.map(({ icon: Icon, label, to, toCohort, toAnalytics }: any) => {
-            const href = toCohort
-              ? activeCohortId ? `/cohorts/${activeCohortId}` : '/select-cohort'
-              : toAnalytics
-              ? activeCohortId ? `/cohorts/${activeCohortId}/analytics` : '/analytics'
-              : to!
+          {navItems.map(
+            ({ icon: Icon, label, to, toCohort, toAnalytics, toProgrammeManager }: any) => {
+              const href = toCohort
+                ? activeCohortId
+                  ? `/cohorts/${activeCohortId}`
+                  : "/select-cohort"
+                : toAnalytics
+                  ? activeCohortId
+                    ? `/cohorts/${activeCohortId}/analytics`
+                    : "/analytics"
+                  : toProgrammeManager
+                    ? activeCohortId
+                      ? `/cohorts/${activeCohortId}/programme-manager`
+                      : "/select-cohort"
+                    : to!;
 
-            return (
-              <NavLink
-                key={label}
-                to={href}
-                end={toCohort}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  [
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-[#0d968b]/10 text-[#0d968b]'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-                  ].join(' ')
-                }
-              >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
-                {label}
-              </NavLink>
-            )
-          })}
+              return (
+                <NavLink
+                  key={label}
+                  to={href}
+                  end={toCohort}
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) =>
+                    [
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-[#0d968b]/10 text-[#0d968b]"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                    ].join(" ")
+                  }
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  {label}
+                </NavLink>
+              );
+            },
+          )}
         </nav>
       </div>
 
@@ -102,7 +125,7 @@ export function AppLayout() {
               {admin?.firstName} {admin?.lastName}
             </p>
             <p className="text-xs text-slate-400">
-              {admin?.role === 'super_admin' ? 'Super Admin' : 'Program Admin'}
+              {admin?.role === "super_admin" ? "Super Admin" : "Program Admin"}
             </p>
           </div>
         </div>
@@ -115,7 +138,7 @@ export function AppLayout() {
         </button>
       </div>
     </>
-  )
+  );
 
   return (
     <div className="flex h-screen bg-background-light">
@@ -135,7 +158,7 @@ export function AppLayout() {
       {/* Mobile sidebar drawer */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:hidden ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <button
@@ -160,16 +183,21 @@ export function AppLayout() {
 
             <div className="relative flex items-center">
               <select
-                value={activeCohortId ?? ''}
+                value={activeCohortId ?? ""}
                 onChange={(e) => {
-                  const id = e.target.value
-                  if (id) { setActiveCohort(id); navigate(`/cohorts/${id}`) }
+                  const id = e.target.value;
+                  if (id) {
+                    setActiveCohort(id);
+                    navigate(`/cohorts/${id}`);
+                  }
                 }}
                 className="appearance-none rounded-lg border-none bg-slate-100 py-2 pl-3 pr-8 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-[#0d968b]/20 sm:pl-4"
               >
                 {!activeCohortId && <option value="">Select cohort</option>}
                 {cohorts.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 h-4 w-4 text-slate-400" />
@@ -177,10 +205,7 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="relative rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100">
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white bg-red-500" />
-            </button>
+            <NotificationBell cohortId={activeCohortId ?? undefined} />
 
             <div className="mx-1 h-8 w-px bg-slate-200" />
 
@@ -190,7 +215,9 @@ export function AppLayout() {
                   {admin?.firstName} {admin?.lastName}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {admin?.role === 'super_admin' ? 'Super Admin' : 'Program Admin'}
+                  {admin?.role === "super_admin"
+                    ? "Super Admin"
+                    : "Program Admin"}
                 </p>
               </div>
               <div
@@ -209,5 +236,5 @@ export function AppLayout() {
       </div>
       <MestChat context={{ cohortId: activeCohortId ?? undefined }} />
     </div>
-  )
+  );
 }

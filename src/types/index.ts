@@ -37,11 +37,17 @@ export interface Trainee {
   country: string
   photo: string | null
   bio: string | null
+  education: string | null
+  top3Skills: string | null
+  coreTechSkills: string | null
+  industriesOfInterest: string | null
+  whyMEST: string | null
   technicalBackground: TechnicalLevel
   aiSkillLevel: AiSkillLevel
   linkedIn: string | null
   github: string | null
   portfolio: string | null
+  funFact: string | null
   entryScore: number | null
   isActive: boolean
   createdAt: string
@@ -253,6 +259,7 @@ export interface SubmissionLink {
   token: string
   event: string | Event
   team: string | Team
+  deliverable?: string | Deliverable
   title: string
   description: string | null
   acceptedTypes: SubmissionFileType[]
@@ -262,6 +269,78 @@ export interface SubmissionLink {
   createdBy: string | Admin
   createdAt: string
   updatedAt: string
+}
+
+export interface DeliverableTeamReview {
+  teamId: string
+  teamName: string
+  summary: string
+  strengths: string[]
+  improvements: string[]
+  score: number | null
+  redFlags: string[]
+  skippedTypes: string[]
+  noContentWarning: boolean
+}
+
+export interface DeliverableAiReview {
+  generatedAt: string
+  model: string
+  teams: DeliverableTeamReview[]
+}
+
+export interface Deliverable {
+  id: string
+  event: string | Event
+  cohort: string
+  title: string
+  description: string | null
+  acceptedTypes: SubmissionFileType[]
+  deadline: string
+  targetType: 'team' | 'trainee'
+  aiReview: DeliverableAiReview | null
+  submissionLinks?: SubmissionLink[]
+  createdBy: string | Admin
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PortalMember {
+  firstName: string | undefined
+  lastName: string | undefined
+  photo: string | null
+  roles: TeamMemberRole[]
+}
+
+export interface PortalLink {
+  id: string
+  token: string
+  title: string
+  description: string | null
+  acceptedTypes: SubmissionFileType[]
+  deadline: string
+  status: SubmissionLinkStatus
+  submissions: SubmissionItem[]
+  teamReview: DeliverableTeamReview | null
+  isActive: boolean
+}
+
+export interface PortalEvalScores {
+  overallAvg: number
+  kpis: Array<{ kpiName: string; avgScore: number; weight: number }>
+}
+
+export interface PortalData {
+  team: {
+    name: string
+    productIdea: string | null
+    marketFocus: string | null
+    members: PortalMember[]
+  }
+  event: { name: string }
+  submissionLinks: PortalLink[]
+  submitterEmail: string
+  evaluationScores: PortalEvalScores | null
 }
 
 export type TeamFeedbackType = 'praise' | 'concern' | 'performance' | 'general'
@@ -288,6 +367,39 @@ export interface MemberChange {
   reason: string | null
   destinationTeam: string | Team | null
   loggedBy: string | Admin
+  createdAt: string
+}
+
+export interface TraineeInsightContent {
+  headline: string
+  profileStrength: 'strong' | 'moderate' | 'developing'
+  summary: string
+  strengths: string[]
+  growthAreas: string[]
+  teamJourneyInsight: string
+  recommendation: string
+  tags: string[]
+}
+
+export interface TraineeInsight {
+  content: TraineeInsightContent
+  generatedAt: string
+}
+
+export interface MentorReview {
+  id: string
+  trainee: string
+  mentor: Admin | string
+  content: string
+  rating: number | null
+  createdAt: string
+}
+
+export interface FacilitatorLog {
+  id: string
+  trainee: string
+  facilitator: Admin | string
+  note: string
   createdAt: string
 }
 

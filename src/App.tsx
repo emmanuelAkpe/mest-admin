@@ -17,8 +17,12 @@ import { TeamsPage } from '@/pages/teams/TeamsPage'
 import { TeamProfilePage } from '@/pages/teams/TeamProfilePage'
 import { SubmitPage } from '@/pages/submissions/SubmitPage'
 import { EvaluatePage } from '@/pages/evaluate/EvaluatePage'
+import { CompleteProfilePage } from '@/pages/complete-profile/CompleteProfilePage'
+import { CompleteTeamPage } from '@/pages/complete-team/CompleteTeamPage'
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { TraineePortalPage } from '@/pages/trainee-portal/TraineePortalPage'
+import { ProgrammeManagerPage } from '@/pages/cohorts/ProgrammeManagerPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -66,6 +70,7 @@ export default function App() {
         <Route path="/cohorts" element={<CohortsPage />} />
         <Route path="/cohorts/:id" element={<DashboardPage />} />
         <Route path="/cohorts/:id/analytics" element={<AnalyticsPage />} />
+        <Route path="/cohorts/:id/programme-manager" element={<ProgrammeManagerPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/trainees" element={<TraineesPage />} />
         <Route path="/trainees/:id" element={<TraineeProfilePage />} />
@@ -78,6 +83,9 @@ export default function App() {
       {/* Public — no auth required */}
       <Route path="/submit/:token" element={<SubmitPage />} />
       <Route path="/evaluate/:token" element={<EvaluatePage />} />
+      <Route path="/complete-profile/:token" element={<CompleteProfilePage />} />
+      <Route path="/complete-team/:token" element={<CompleteTeamPage />} />
+      <Route path="/trainee-portal" element={<TraineePortalPage />} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { MapPin, Flag, Zap, Share2, ChevronDown, Check, ArrowLeft, Network, LogIn, LogOut, RefreshCw } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { MapPin, Flag, Zap, Share2, ChevronDown, Check, ArrowLeft, Network, LogIn, LogOut, RefreshCw, Star, Plus, Loader2, Camera } from 'lucide-react'
 import {
   RadarChart,
   Radar,
@@ -11,10 +11,11 @@ import {
   Tooltip,
 } from 'recharts'
 import { traineesApi } from '@/api/trainees'
+import { uploadFile } from '@/api/upload'
 import { AvatarWithFallback } from '@/components/ui/Avatar'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { countryFlag } from '@/lib/countryFlag'
-import type { Trainee, Cohort, MemberChange, Team } from '@/types'
+import type { Trainee, Cohort, MemberChange, Team, TraineeInsightContent, MentorReview, FacilitatorLog } from '@/types'
 
 const TEAL = '#0d968b'
 
@@ -322,13 +323,359 @@ function TeamHistory({ traineeId }: { traineeId: string }) {
   )
 }
 
+/* ── AI Insights Panel ── */
+function AiInsightsPanel({ traineeId }: { traineeId: string }) {
+  const queryClient = useQueryClient()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['trainee-insights', traineeId],
+    queryFn: () => traineesApi.getInsights(traineeId),
+    retry: false,
+  })
+
+  const { mutate: generate, isPending: isGenerating } = useMutation({
+    mutationFn: () => traineesApi.generateInsights(traineeId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trainee-insights', traineeId] }),
+  })
+
+  const strengthColors: Record<string, string> = {
+    strong: '#16a34a',
+    moderate: '#d97706',
+    developing: '#6366f1',
+  }
+
+  const insightRaw = data?.data as { data?: { content: TraineeInsightContent; generatedAt: string } } | { content: TraineeInsightContent; generatedAt: string } | undefined
+  const insight = (insightRaw as { content?: TraineeInsightContent; generatedAt?: string })?.content
+    ? (insightRaw as { content: TraineeInsightContent; generatedAt: string })
+    : (insightRaw as { data?: { content: TraineeInsightContent; generatedAt: string } })?.data
+
+  if (isLoading) {
+    return (
+      <div className="relative overflow-hidden rounded-xl bg-indigo-600 p-5 text-white shadow-lg sm:p-6">
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-32 bg-white/20" />
+          <Skeleton className="h-16 w-full bg-white/20" />
+          <Skeleton className="h-4 w-3/4 bg-white/20" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!insight) {
+    return (
+      <div className="relative overflow-hidden rounded-xl bg-indigo-600 p-5 text-white shadow-lg sm:p-6">
+        <div className="absolute right-4 top-4 opacity-20">
+          <Zap className="h-14 w-14 rotate-12" />
+        </div>
+        <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
+          <Zap className="h-5 w-5" /> AI Insights
+        </h3>
+        <p className="mb-4 text-sm leading-relaxed opacity-90">
+          AI-generated insights surface once team performance data is available.
+        </p>
+        <button
+          onClick={() => generate()}
+          disabled={isGenerating}
+          className="flex items-center gap-2 rounded-lg bg-white/20 px-4 py-2 text-sm font-bold transition hover:bg-white/30 disabled:opacity-60"
+        >
+          {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+          {isGenerating ? 'Generating…' : 'Generate Insights'}
+        </button>
+      </div>
+    )
+  }
+
+  const c = insight.content
+  const strengthColor = strengthColors[c.profileStrength] ?? '#6366f1'
+
+  return (
+    <div className="relative overflow-hidden rounded-xl bg-indigo-600 p-5 text-white shadow-lg sm:p-6">
+      <div className="absolute right-4 top-4 opacity-20">
+        <Zap className="h-14 w-14 rotate-12" />
+      </div>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-lg font-bold">
+          <Zap className="h-5 w-5" /> AI Insights
+        </h3>
+        <button
+          onClick={() => generate()}
+          disabled={isGenerating}
+          className="flex items-center gap-1.5 rounded-md bg-white/20 px-2.5 py-1 text-[11px] font-bold transition hover:bg-white/30 disabled:opacity-60"
+        >
+          {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          Refresh
+        </button>
+      </div>
+
+      <div className="relative z-10 space-y-3">
+        <div className="rounded-lg border border-white/20 bg-white/10 p-3">
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-xs font-bold uppercase opacity-70">Profile Strength</p>
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+              style={{ backgroundColor: `${strengthColor}33`, color: '#fff', border: `1px solid ${strengthColor}66` }}
+            >
+              {c.profileStrength}
+            </span>
+          </div>
+          <p className="text-sm font-semibold leading-snug">{c.headline}</p>
+        </div>
+
+        <p className="text-sm leading-relaxed opacity-90">{c.summary}</p>
+
+        {c.strengths?.length > 0 && (
+          <div>
+            <p className="mb-1 text-[10px] font-bold uppercase opacity-70">Strengths</p>
+            <ul className="space-y-1">
+              {c.strengths.map((s, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs opacity-90">
+                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-300" />{s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {c.growthAreas?.length > 0 && (
+          <div>
+            <p className="mb-1 text-[10px] font-bold uppercase opacity-70">Growth Areas</p>
+            <ul className="space-y-1">
+              {c.growthAreas.map((g, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs opacity-90">
+                  <span className="mt-0.5 h-3 w-3 shrink-0 text-yellow-300">→</span>{g}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {c.recommendation && (
+          <div className="rounded-lg border border-white/20 bg-white/10 p-2.5">
+            <p className="mb-0.5 text-[10px] font-bold uppercase opacity-70">Recommendation</p>
+            <p className="text-xs leading-relaxed">{c.recommendation}</p>
+          </div>
+        )}
+
+        {c.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {c.tags.map((tag, i) => (
+              <span key={i} className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-bold">{tag}</span>
+            ))}
+          </div>
+        )}
+
+        <p className="text-right text-[10px] opacity-50">
+          Generated {new Date(insight.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* ── Mentor Reviews Panel ── */
+function MentorReviewsPanel({ traineeId }: { traineeId: string }) {
+  const queryClient = useQueryClient()
+  const [content, setContent] = useState('')
+  const [rating, setRating] = useState(0)
+  const [adding, setAdding] = useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['trainee-mentor-reviews', traineeId],
+    queryFn: () => traineesApi.listMentorReviews(traineeId),
+  })
+
+  const { mutate: submit, isPending } = useMutation({
+    mutationFn: () => traineesApi.createMentorReview(traineeId, { content, rating: rating || undefined }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trainee-mentor-reviews', traineeId] })
+      setContent('')
+      setRating(0)
+      setAdding(false)
+    },
+  })
+
+  const reviewsRaw = data?.data
+  const reviews: MentorReview[] = Array.isArray(reviewsRaw) ? reviewsRaw : (reviewsRaw as { data?: MentorReview[] })?.data ?? []
+
+  return (
+    <div className="px-4 pb-4 space-y-3">
+      {isLoading && <Skeleton className="h-12 rounded-lg" />}
+
+      {!isLoading && reviews.length === 0 && !adding && (
+        <p className="text-sm italic text-slate-400">No mentor reviews submitted yet.</p>
+      )}
+
+      {reviews.map((r) => {
+        const mentor = typeof r.mentor === 'object' ? r.mentor : null
+        const name = mentor ? `${mentor.firstName} ${mentor.lastName}` : 'Mentor'
+        return (
+          <div key={r.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="font-semibold text-slate-700">{name}</span>
+              <div className="flex items-center gap-2">
+                {r.rating && (
+                  <span className="flex items-center gap-0.5 text-xs font-bold text-amber-500">
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />{r.rating}/5
+                  </span>
+                )}
+                <span className="text-[10px] text-slate-400">
+                  {new Date(r.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            </div>
+            <p className="text-slate-600 leading-relaxed">{r.content}</p>
+          </div>
+        )
+      })}
+
+      {adding ? (
+        <div className="space-y-2">
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Write your review…"
+            rows={3}
+            className="w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:border-[#0d968b] resize-none"
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Rating:</span>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} onClick={() => setRating(n)} className="focus:outline-none">
+                <Star className={`h-4 w-4 ${n <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => submit()}
+              disabled={isPending || !content.trim()}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+              style={{ backgroundColor: TEAL }}
+            >
+              {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              Submit
+            </button>
+            <button onClick={() => setAdding(false)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 text-xs font-bold transition"
+          style={{ color: TEAL }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Review
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* ── Facilitator Log Panel ── */
+function FacilitatorLogPanel({ traineeId }: { traineeId: string }) {
+  const queryClient = useQueryClient()
+  const [note, setNote] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['trainee-facilitator-logs', traineeId],
+    queryFn: () => traineesApi.listFacilitatorLogs(traineeId),
+  })
+
+  const { mutate: submit, isPending } = useMutation({
+    mutationFn: () => traineesApi.createFacilitatorLog(traineeId, { note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trainee-facilitator-logs', traineeId] })
+      setNote('')
+      setAdding(false)
+    },
+  })
+
+  const logsRaw = data?.data
+  const logs: FacilitatorLog[] = Array.isArray(logsRaw) ? logsRaw : (logsRaw as { data?: FacilitatorLog[] })?.data ?? []
+
+  return (
+    <div className="px-4 pb-4 space-y-3">
+      {isLoading && <Skeleton className="h-12 rounded-lg" />}
+
+      {!isLoading && logs.length === 0 && !adding && (
+        <p className="text-sm italic text-slate-400">No facilitator notes recorded yet.</p>
+      )}
+
+      {logs.map((l) => {
+        const facilitator = typeof l.facilitator === 'object' ? l.facilitator : null
+        const name = facilitator ? `${facilitator.firstName} ${facilitator.lastName}` : 'Facilitator'
+        return (
+          <div key={l.id} className="flex gap-3 text-sm">
+            <div className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#0d968b]" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-semibold text-slate-700 text-xs">{name}</span>
+                <span className="text-[10px] text-slate-400">
+                  {new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <p className="text-slate-600 leading-relaxed">{l.note}</p>
+            </div>
+          </div>
+        )
+      })}
+
+      {adding ? (
+        <div className="space-y-2">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Add a note…"
+            rows={3}
+            className="w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:border-[#0d968b] resize-none"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => submit()}
+              disabled={isPending || !note.trim()}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+              style={{ backgroundColor: TEAL }}
+            >
+              {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              Save
+            </button>
+            <button onClick={() => setAdding(false)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 text-xs font-bold transition"
+          style={{ color: TEAL }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Add Note
+        </button>
+      )}
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════
    Page
 ══════════════════════════════════════════════ */
 export function TraineeProfilePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+  const [linkSent, setLinkSent] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  const { mutate: sendLink, isPending: isSendingLink } = useMutation({
+    mutationFn: () => traineesApi.sendProfileLink(id!),
+    onSuccess: () => { setLinkSent(true); setTimeout(() => setLinkSent(false), 3000) },
+  })
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['trainee', id],
@@ -367,6 +714,20 @@ export function TraineeProfilePage() {
     })
   }
 
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsUploadingPhoto(true)
+    try {
+      const url = await uploadFile(file, 'trainees')
+      await traineesApi.update(id!, { photo: url })
+      queryClient.invalidateQueries({ queryKey: ['trainee', id] })
+    } finally {
+      setIsUploadingPhoto(false)
+      if (photoInputRef.current) photoInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6 p-4 sm:p-6">
 
@@ -381,13 +742,31 @@ export function TraineeProfilePage() {
 
       {/* ── Profile Header ── */}
       <section className="flex flex-col items-center gap-6 rounded-xl border border-[#0d968b]/10 bg-white p-5 shadow-sm sm:flex-row sm:p-6">
-        {/* Avatar — no border ring */}
-        <div className="relative shrink-0">
+        {/* Avatar */}
+        <div className="relative shrink-0 group">
           <AvatarWithFallback src={trainee.photo} name={fullName} size="xl" />
           <span
             className={`absolute bottom-1 right-1 h-5 w-5 rounded-full border-2 border-white sm:h-6 sm:w-6 ${
               trainee.isActive ? 'bg-green-500' : 'bg-slate-300'
             }`}
+          />
+          {/* Upload overlay */}
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={isUploadingPhoto}
+            className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity disabled:cursor-wait"
+          >
+            {isUploadingPhoto
+              ? <Loader2 className="h-6 w-6 animate-spin text-white" />
+              : <Camera className="h-6 w-6 text-white" />}
+          </button>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoChange}
           />
         </div>
 
@@ -424,6 +803,10 @@ export function TraineeProfilePage() {
             <p className="max-w-2xl text-sm leading-relaxed text-slate-600">{trainee.bio}</p>
           )}
 
+          {trainee.funFact && (
+            <p className="max-w-2xl text-sm text-slate-500 italic">"{trainee.funFact}"</p>
+          )}
+
           {/* Social links */}
           {(trainee.linkedIn || trainee.github || trainee.portfolio) && (
             <div className="flex flex-wrap justify-center gap-3 pt-1 sm:justify-start">
@@ -454,14 +837,25 @@ export function TraineeProfilePage() {
 
         {/* Right: Share + mini stats */}
         <div className="flex flex-col items-center gap-3 sm:items-end">
-          <button
-            onClick={handleShare}
-            className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors"
-            style={{ backgroundColor: `${TEAL}1a`, color: TEAL }}
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-            {copied ? 'Copied!' : 'Share'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => sendLink()}
+              disabled={isSendingLink}
+              className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors disabled:opacity-60"
+              style={{ backgroundColor: `${TEAL}1a`, color: TEAL }}
+            >
+              {isSendingLink ? <Loader2 className="h-4 w-4 animate-spin" /> : linkSent ? <Check className="h-4 w-4" /> : null}
+              {linkSent ? 'Link Sent!' : isSendingLink ? 'Sending…' : 'Send Profile Link'}
+            </button>
+            <button
+              onClick={handleShare}
+              className="flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-bold transition-colors"
+              style={{ backgroundColor: `${TEAL}1a`, color: TEAL }}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+              {copied ? 'Copied!' : 'Share'}
+            </button>
+          </div>
 
           <div className="flex gap-4">
             <div className="p-3 text-center">
@@ -499,51 +893,28 @@ export function TraineeProfilePage() {
         <div className="space-y-6 lg:col-span-2">
           <SkillsRadar trainee={trainee} />
           <PerformanceTrend />
-
+          <section className="rounded-xl border border-[#0d968b]/10 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex items-center gap-2">
+              <Network className="h-4 w-4" style={{ color: TEAL }} />
+              <h3 className="font-bold text-slate-900">Team Membership History</h3>
+            </div>
+            <TeamHistory traineeId={id!} />
+          </section>
         </div>
 
         {/* Right column */}
         <div className="space-y-6">
 
           {/* AI Insights */}
-          <div className="relative overflow-hidden rounded-xl bg-indigo-600 p-5 text-white shadow-lg sm:p-6">
-            <div className="absolute right-4 top-4 opacity-20">
-              <Zap className="h-14 w-14 rotate-12" />
-            </div>
-            <h3 className="mb-4 flex items-center gap-2 text-lg font-bold">
-              <Zap className="h-5 w-5" /> AI Insights
-            </h3>
-            <div className="relative z-10 space-y-4">
-              <div className="rounded-lg border border-white/20 bg-white/10 p-3">
-                <p className="mb-1 text-xs font-bold uppercase opacity-80">Status</p>
-                <p className="text-lg font-bold italic">"Awaiting Data"</p>
-              </div>
-              <p className="text-sm leading-relaxed opacity-90">
-                AI-generated insights will surface once this trainee's KPI evaluations and team performance data are recorded.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {trainee.technicalBackground !== 'none' && (
-                  <span className="rounded bg-white/20 px-2 py-1 text-[10px]">
-                    {levelLabel(trainee.technicalBackground)} Tech
-                  </span>
-                )}
-                {trainee.aiSkillLevel !== 'none' && (
-                  <span className="rounded bg-white/20 px-2 py-1 text-[10px]">
-                    AI: {levelLabel(trainee.aiSkillLevel)}
-                  </span>
-                )}
-                <span className="rounded bg-white/20 px-2 py-1 text-[10px]">{trainee.country}</span>
-              </div>
-            </div>
-          </div>
+          <AiInsightsPanel traineeId={id!} />
 
           {/* Mentor Reviews + Facilitator Log */}
           <div className="overflow-hidden rounded-xl border border-[#0d968b]/10 bg-white shadow-sm divide-y divide-[#0d968b]/5">
             <Collapsible title="Mentor Reviews">
-              <p className="text-sm italic text-slate-400">No mentor reviews have been submitted yet.</p>
+              <MentorReviewsPanel traineeId={id!} />
             </Collapsible>
             <Collapsible title="Facilitator Log">
-              <p className="text-sm italic text-slate-400">No facilitator notes recorded yet.</p>
+              <FacilitatorLogPanel traineeId={id!} />
             </Collapsible>
           </div>
 
@@ -558,14 +929,6 @@ export function TraineeProfilePage() {
         </div>
       </div>
 
-      {/* ── Team History (full width) ── */}
-      <section className="rounded-xl border border-[#0d968b]/10 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-5 flex items-center gap-2">
-          <Network className="h-4 w-4" style={{ color: TEAL }} />
-          <h3 className="font-bold text-slate-900">Team Membership History</h3>
-        </div>
-        <TeamHistory traineeId={id!} />
-      </section>
     </div>
   )
 }
