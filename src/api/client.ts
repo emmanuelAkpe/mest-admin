@@ -1,10 +1,11 @@
 import axios from 'axios'
 import { useAuthStore } from '@/store/auth'
+import { mest_server } from './server'
 
 const AUTH_ENDPOINTS = ['/auth/login', '/auth/refresh', '/auth/onboard', '/auth/forgot-password', '/auth/reset-password']
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: mest_server,
   withCredentials: true,
 })
 
@@ -53,7 +54,7 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh`,
+          `${mest_server}/auth/refresh`,
           {},
           { withCredentials: true }
         )

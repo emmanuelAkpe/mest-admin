@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL as string
+import { mest_server } from './server'
+
+const API_BASE = mest_server
 
 export interface ChatMessage {
   role: 'user' | 'model'

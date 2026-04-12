@@ -3,8 +3,10 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import { ArrowLeft, CheckCircle, AlertTriangle, ChevronRight, Users, Check, Loader2 } from 'lucide-react'
 
+import { mest_server } from '@/api/server'
+
 const TEAL = '#0d968b'
-const API = import.meta.env.VITE_API_URL as string
+const API = mest_server
 
 /* ── Types ── */
 interface KpiDef {
