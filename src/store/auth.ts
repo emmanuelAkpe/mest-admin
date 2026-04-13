@@ -8,6 +8,7 @@ interface AuthState {
   isAuthenticated: boolean
   setAuth: (admin: Admin, accessToken: string) => void
   setAccessToken: (accessToken: string) => void
+  updateAdmin: (partial: Partial<Admin>) => void
   clearAuth: () => void
 }
 
@@ -20,6 +21,8 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (admin, accessToken) =>
         set({ admin, accessToken, isAuthenticated: true }),
       setAccessToken: (accessToken) => set({ accessToken }),
+      updateAdmin: (partial) =>
+        set((state) => ({ admin: state.admin ? { ...state.admin, ...partial } : state.admin })),
       clearAuth: () =>
         set({ admin: null, accessToken: null, isAuthenticated: false }),
     }),

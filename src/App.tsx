@@ -23,6 +23,7 @@ import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { TraineePortalPage } from '@/pages/trainee-portal/TraineePortalPage'
 import { ProgrammeManagerPage } from '@/pages/cohorts/ProgrammeManagerPage'
+import { SettingsPage } from '@/pages/settings/SettingsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/teams" element={<TeamsPage />} />
         <Route path="/teams/:id" element={<TeamProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
 
       {/* Public — no auth required */}

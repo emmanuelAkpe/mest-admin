@@ -49,4 +49,7 @@ export const authApi = {
 
   listAdmins: () =>
     api.get<ApiResponse<Admin[]>>('/auth/admins'),
+
+  updateProfile: (payload: { firstName?: string; lastName?: string; photo?: string | null }) =>
+    api.patch<ApiResponse<Admin>>('/auth/profile', payload),
 }

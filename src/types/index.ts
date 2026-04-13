@@ -6,7 +6,9 @@ export interface Admin {
   lastName: string
   email: string
   role: AdminRole
+  photo: string | null
   lastLogin: string | null
+  isActive?: boolean
   createdAt: string
 }
 

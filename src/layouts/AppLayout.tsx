@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   Sparkles,
+  Settings,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth";
@@ -20,6 +21,7 @@ import { cohortsApi } from "@/api/cohorts";
 import type { Cohort } from "@/types";
 import { MestChat } from "@/components/chat/MestChat";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AvatarWithFallback } from "@/components/ui/Avatar";
 
 const TEAL = "#0d968b";
 
@@ -34,6 +36,11 @@ const navItems = [
 
 export function AppLayout() {
   const { admin, clearAuth } = useAuthStore();
+
+  const roleLabel =
+    admin?.role === 'super_admin' ? 'Super Admin'
+    : admin?.role === 'mentor'    ? 'Mentor'
+    : 'Program Admin';
   const { activeCohortId, setActiveCohort, clearActiveCohort } =
     useCohortStore();
   const navigate = useNavigate();
@@ -113,22 +120,27 @@ export function AppLayout() {
       </div>
 
       <div className="mt-auto border-t border-slate-200 p-4">
-        <div className="flex items-center gap-3 px-2 pb-3">
+        <NavLink to="/settings" onClick={() => setSidebarOpen(false)}
+          className={({ isActive }) =>
+            `flex items-center gap-3 mb-1 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              isActive ? 'bg-[#0d968b]/10 text-[#0d968b]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
           <div
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
             style={{ backgroundColor: TEAL }}
           >
             {initials}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-900 leading-none">
               {admin?.firstName} {admin?.lastName}
             </p>
-            <p className="text-xs text-slate-400">
-              {admin?.role === "super_admin" ? "Super Admin" : "Program Admin"}
-            </p>
+            <p className="text-xs text-slate-400 mt-0.5">{roleLabel}</p>
           </div>
-        </div>
+          <Settings className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        </NavLink>
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
@@ -209,24 +221,19 @@ export function AppLayout() {
 
             <div className="mx-1 h-8 w-px bg-slate-200" />
 
-            <div className="flex items-center gap-3">
+            <NavLink to="/settings" className="flex items-center gap-3 rounded-lg p-1 hover:bg-slate-100 transition-colors">
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-bold leading-none text-slate-900">
                   {admin?.firstName} {admin?.lastName}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {admin?.role === "super_admin"
-                    ? "Super Admin"
-                    : "Program Admin"}
-                </p>
+                <p className="mt-0.5 text-xs text-slate-500">{roleLabel}</p>
               </div>
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-                style={{ backgroundColor: TEAL }}
-              >
-                {initials}
-              </div>
-            </div>
+              <AvatarWithFallback
+                src={admin?.photo ?? null}
+                name={`${admin?.firstName} ${admin?.lastName}`}
+                size="sm"
+              />
+            </NavLink>
           </div>
         </header>
 
