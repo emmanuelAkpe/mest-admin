@@ -70,7 +70,7 @@ const AUTO_MAP: Record<string, keyof CreateTraineePayload> = {
 
 type Step = 'upload' | 'map' | 'preview' | 'importing' | 'done'
 
-interface ImportResult { email: string; ok: boolean; error?: string }
+interface ImportResult { email: string | undefined; ok: boolean; error?: string }
 
 interface Props { onClose: () => void }
 

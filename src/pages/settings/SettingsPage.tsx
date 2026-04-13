@@ -133,7 +133,7 @@ function ProfileTab() {
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
 
       <button
-        onClick={() => saveProfile()}
+        onClick={() => saveProfile(undefined)}
         disabled={saving || uploadingPhoto || !firstName.trim() || !lastName.trim()}
         className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
         style={{ backgroundColor: TEAL }}
