@@ -6,9 +6,10 @@ import {
   UserPlus, Pencil, Check, X as XIcon, UserMinus, UserCheck, RefreshCw,
   MessageSquare, Trash2, ChevronDown, ChevronUp, Star, AlertCircle, TrendingUp, MessageCircle,
   Link2, Upload, Clock, Copy, CheckCheck, Film, FileText, Image, Table, Globe, File,
-  Users, LayoutDashboard, History, FlameKindling,
+  Users, LayoutDashboard, History, FlameKindling, BookUser, Plus, CalendarCheck,
 } from 'lucide-react'
 import { teamsApi } from '@/api/teams'
+import { authApi } from '@/api/auth'
 import { submissionLinksApi } from '@/api/submissionLinks'
 import { AvatarWithFallback } from '@/components/ui/Avatar'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -16,8 +17,8 @@ import { AddMemberModal } from './AddMemberModal'
 import { GenerateSubmissionLinkModal } from '../submissions/GenerateSubmissionLinkModal'
 import { countryFlag } from '@/lib/countryFlag'
 import type {
-  Team, Trainee, Event, PivotType, TeamMemberRole, TeamStatus,
-  TeamFeedbackType, TeamFeedback, MemberChange, SubmissionLink, SubmissionFileType,
+  Team, Trainee, Event, Admin, PivotType, TeamMemberRole, TeamStatus,
+  TeamFeedbackType, TeamFeedback, MemberChange, SubmissionLink, SubmissionFileType, MentorSession,
 } from '@/types'
 
 const TEAL = '#0d968b'
@@ -387,13 +388,14 @@ function TeamProfileSkeleton() {
 /* ══════════════════════════════════════════════
    Tabs
 ══════════════════════════════════════════════ */
-type TabId = 'overview' | 'members' | 'submissions' | 'feedback' | 'history'
+type TabId = 'overview' | 'members' | 'submissions' | 'feedback' | 'mentor' | 'history'
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'overview',     label: 'Overview',     icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
   { id: 'members',      label: 'Members',      icon: <Users className="h-3.5 w-3.5" /> },
   { id: 'submissions',  label: 'Submissions',  icon: <Upload className="h-3.5 w-3.5" /> },
   { id: 'feedback',     label: 'Feedback',     icon: <MessageSquare className="h-3.5 w-3.5" /> },
+  { id: 'mentor',       label: 'Mentor',       icon: <BookUser className="h-3.5 w-3.5" /> },
   { id: 'history',      label: 'History',      icon: <History className="h-3.5 w-3.5" /> },
 ]
 
@@ -427,6 +429,15 @@ export function TeamProfilePage() {
   // Submissions
   const [showGenerateLink, setShowGenerateLink] = useState(false)
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null)
+
+  // Mentor
+  const [showSessionForm, setShowSessionForm] = useState(false)
+  const [sessionDate, setSessionDate] = useState('')
+  const [sessionNotes, setSessionNotes] = useState('')
+  const [sessionItems, setSessionItems] = useState('')
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [assigningMentor, setAssigningMentor] = useState(false)
+  const [mentorSearch, setMentorSearch] = useState('')
 
   /* ── Queries ── */
   const { data, isLoading, isError } = useQuery({
@@ -481,6 +492,23 @@ export function TeamProfilePage() {
   const submissionLinks: SubmissionLink[] = Array.isArray(subLinksRaw)
     ? subLinksRaw : (subLinksRaw as { data?: SubmissionLink[] })?.data ?? []
 
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['mentor-sessions', id],
+    queryFn: () => teamsApi.listMentorSessions(id!),
+    enabled: !!id,
+  })
+  const sessionsRaw = sessionsData?.data
+  const mentorSessions: MentorSession[] = Array.isArray(sessionsRaw)
+    ? sessionsRaw : (sessionsRaw as { data?: MentorSession[] })?.data ?? []
+
+  const { data: adminsData } = useQuery({
+    queryKey: ['admins'],
+    queryFn: () => authApi.listAdmins(),
+  })
+  const adminsRaw = adminsData?.data
+  const allAdmins: Admin[] = Array.isArray(adminsRaw)
+    ? adminsRaw : (adminsRaw as { data?: Admin[] })?.data ?? []
+
   /* ── Mutations ── */
   const { mutate: updateTeam, isPending: updatingTeam } = useMutation({
     mutationFn: (payload: { name: string; productIdea: string; marketFocus: string }) =>
@@ -518,6 +546,34 @@ export function TeamProfilePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['submission-links', id] }),
   })
 
+  const { mutate: doAssignMentor, isPending: savingMentor } = useMutation({
+    mutationFn: (mentorId: string | null) => teamsApi.assignMentor(id!, mentorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team', id] })
+      setAssigningMentor(false)
+      setMentorSearch('')
+    },
+  })
+
+  const { mutate: logSession, isPending: loggingSession } = useMutation({
+    mutationFn: () => teamsApi.createMentorSession(id!, {
+      sessionDate,
+      notes: sessionNotes.trim() || undefined,
+      actionItems: sessionItems.split('\n').map(s => s.trim()).filter(Boolean),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mentor-sessions', id] })
+      setShowSessionForm(false)
+      setSessionDate(''); setSessionNotes(''); setSessionItems(''); setSessionError(null)
+    },
+    onError: (e: unknown) => setSessionError(e instanceof Error ? e.message : 'Failed to log session'),
+  })
+
+  const { mutate: deleteSession } = useMutation({
+    mutationFn: (sessionId: string) => teamsApi.deleteMentorSession(sessionId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mentor-sessions', id] }),
+  })
+
   const copyLink = (token: string, linkId: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/submit/${token}`)
     setCopiedLinkId(linkId)
@@ -535,6 +591,7 @@ export function TeamProfilePage() {
     members: team.members.length,
     submissions: submissionLinks.length,
     feedback: feedbackList.length,
+    mentor: mentorSessions.length,
   }
 
   /* ══════════════════════════════════════════════
@@ -1030,6 +1087,192 @@ export function TeamProfilePage() {
     </div>
   )
 
+  // ── MENTOR TAB ───────────────────────────────────────────────────────────
+  const currentMentor = team.mentor && typeof team.mentor === 'object' ? (team.mentor as Admin) : null
+  const filteredAdmins = allAdmins.filter(a =>
+    `${a.firstName} ${a.lastName} ${a.email}`.toLowerCase().includes(mentorSearch.toLowerCase())
+  )
+
+  const mentorTab = (
+    <div className="space-y-5">
+      {/* Mentor assignment */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="font-bold text-slate-900">Assigned Mentor</h2>
+            <p className="mt-0.5 text-xs text-slate-400">The MEST staff member mentoring this team</p>
+          </div>
+          {!assigningMentor && (
+            <button onClick={() => setAssigningMentor(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+              <Pencil className="h-3 w-3" />{currentMentor ? 'Change' : 'Assign'}
+            </button>
+          )}
+        </div>
+
+        {assigningMentor ? (
+          <div className="p-5 space-y-3">
+            <input
+              value={mentorSearch}
+              onChange={e => setMentorSearch(e.target.value)}
+              placeholder="Search by name or email…"
+              className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
+            />
+            <div className="max-h-52 overflow-y-auto divide-y divide-slate-50 rounded-lg border border-slate-100">
+              {currentMentor && (
+                <button onClick={() => doAssignMentor(null)} disabled={savingMentor}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs text-red-500 hover:bg-red-50 disabled:opacity-40">
+                  <XIcon className="h-3.5 w-3.5" /> Remove mentor assignment
+                </button>
+              )}
+              {filteredAdmins.map(admin => {
+                const isCurrent = currentMentor?.id === admin.id
+                return (
+                  <button key={admin.id}
+                    onClick={() => doAssignMentor(admin.id)}
+                    disabled={savingMentor || isCurrent}
+                    className={`flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 disabled:opacity-50 ${isCurrent ? 'bg-teal-50' : ''}`}>
+                    <AvatarWithFallback src={null} name={`${admin.firstName} ${admin.lastName}`} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900">{admin.firstName} {admin.lastName}</p>
+                      <p className="text-[11px] text-slate-400">{admin.email} · {admin.role.replace('_', ' ')}</p>
+                    </div>
+                    {isCurrent && <Check className="h-3.5 w-3.5 shrink-0" style={{ color: TEAL }} />}
+                  </button>
+                )
+              })}
+              {filteredAdmins.length === 0 && (
+                <p className="px-4 py-3 text-xs italic text-slate-400">No admins match your search.</p>
+              )}
+            </div>
+            <button onClick={() => { setAssigningMentor(false); setMentorSearch('') }}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="px-5 py-4">
+            {currentMentor ? (
+              <div className="flex items-center gap-3">
+                <AvatarWithFallback src={null} name={`${currentMentor.firstName} ${currentMentor.lastName}`} size="md" />
+                <div>
+                  <p className="font-semibold text-slate-900">{currentMentor.firstName} {currentMentor.lastName}</p>
+                  <p className="text-xs text-slate-400">{currentMentor.email} · {currentMentor.role.replace('_', ' ')}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm italic text-slate-400">No mentor assigned yet.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Session log */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="font-bold text-slate-900">Mentor Sessions</h2>
+            <p className="mt-0.5 text-xs text-slate-400">Meetings between the mentor and team</p>
+          </div>
+          <button onClick={() => setShowSessionForm(v => !v)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+            style={{ backgroundColor: TEAL }}>
+            <Plus className="h-3.5 w-3.5" />
+            {showSessionForm ? 'Cancel' : 'Log Session'}
+            {showSessionForm ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        </div>
+
+        {showSessionForm && (
+          <div className="border-b border-slate-100 bg-slate-50 px-5 py-4 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500">Session Date *</label>
+                <input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Notes</label>
+              <textarea value={sessionNotes} onChange={e => setSessionNotes(e.target.value)}
+                rows={3} placeholder="What was discussed?"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b] resize-none" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Action Items <span className="font-normal text-slate-400">(one per line)</span></label>
+              <textarea value={sessionItems} onChange={e => setSessionItems(e.target.value)}
+                rows={3} placeholder={"Follow up on pitch deck\nReview financial model"}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b] resize-none font-mono text-xs" />
+            </div>
+            {sessionError && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">{sessionError}</p>}
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => { setShowSessionForm(false); setSessionError(null) }}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white">Discard</button>
+              <button onClick={() => logSession()} disabled={!sessionDate || loggingSession}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                style={{ backgroundColor: TEAL }}>
+                <CalendarCheck className="h-3.5 w-3.5" />{loggingSession ? 'Saving…' : 'Save Session'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {sessionsLoading ? (
+          <div className="space-y-3 p-5">{[1,2].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}</div>
+        ) : mentorSessions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center px-5 py-12 text-center">
+            <CalendarDays className="mx-auto mb-2 h-8 w-8 text-slate-200" />
+            <p className="text-sm font-semibold text-slate-700">No sessions logged yet</p>
+            <p className="mt-1 text-xs text-slate-400">Log the first mentor session above.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {mentorSessions.map(session => {
+              const mentor = typeof session.mentor === 'object' ? (session.mentor as Admin) : null
+              const loggedBy = typeof session.loggedBy === 'object' ? (session.loggedBy as Admin) : null
+              const date = new Date(session.sessionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+              return (
+                <div key={session.id} className="group px-5 py-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="text-sm font-semibold text-slate-900">{date}</span>
+                      {mentor && (
+                        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                          {mentor.firstName} {mentor.lastName}
+                        </span>
+                      )}
+                    </div>
+                    <button onClick={() => deleteSession(session.id)} title="Delete"
+                      className="shrink-0 rounded-lg p-1.5 text-slate-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-400 group-hover:opacity-100">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {session.notes && (
+                    <p className="text-sm leading-relaxed text-slate-600 pl-5">{session.notes}</p>
+                  )}
+                  {session.actionItems.length > 0 && (
+                    <ul className="pl-5 space-y-1">
+                      {session.actionItems.map((item, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                          <Check className="h-3 w-3 shrink-0 mt-0.5 text-teal-500" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {loggedBy && (
+                    <p className="pl-5 text-[11px] text-slate-400">Logged by {loggedBy.firstName} {loggedBy.lastName} · {timeAgo(session.createdAt)}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   /* ── Render ── */
   return (
     <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
@@ -1159,6 +1402,7 @@ export function TeamProfilePage() {
       {activeTab === 'members'     && membersTab}
       {activeTab === 'submissions' && submissionsTab}
       {activeTab === 'feedback'    && feedbackTab}
+      {activeTab === 'mentor'      && mentorTab}
       {activeTab === 'history'     && historyTab}
 
       {showAddMember && (() => {

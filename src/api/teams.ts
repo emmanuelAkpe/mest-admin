@@ -1,5 +1,5 @@
 import api from './client'
-import type { Team, ApiResponse, TeamMemberRole, PivotType, TeamFeedback, TeamFeedbackType, MemberChange } from '@/types'
+import type { Team, ApiResponse, TeamMemberRole, PivotType, TeamFeedback, TeamFeedbackType, MemberChange, MentorSession } from '@/types'
 
 export interface CreateTeamPayload {
   name: string
@@ -52,4 +52,21 @@ export const teamsApi = {
 
   revokeProfileLink: (id: string) =>
     api.delete(`/teams/${id}/profile-link`),
+
+  // Mentor assignment
+  assignMentor: (id: string, mentorId: string | null) =>
+    api.patch<ApiResponse<{ id: string; mentor: Team['mentor'] }>>(`/teams/${id}/mentor`, { mentorId }),
+
+  // Mentor sessions
+  listMentorSessions: (teamId: string) =>
+    api.get<ApiResponse<MentorSession[]>>(`/teams/${teamId}/mentor-sessions`),
+
+  createMentorSession: (teamId: string, payload: { sessionDate: string; notes?: string; actionItems?: string[] }) =>
+    api.post<ApiResponse<MentorSession>>(`/teams/${teamId}/mentor-sessions`, payload),
+
+  updateMentorSession: (sessionId: string, payload: { sessionDate?: string; notes?: string; actionItems?: string[] }) =>
+    api.patch<ApiResponse<MentorSession>>(`/mentor-sessions/${sessionId}`, payload),
+
+  deleteMentorSession: (sessionId: string) =>
+    api.delete<ApiResponse<void>>(`/mentor-sessions/${sessionId}`),
 }

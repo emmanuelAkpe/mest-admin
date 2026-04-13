@@ -1,4 +1,4 @@
-export type AdminRole = 'super_admin' | 'program_admin'
+export type AdminRole = 'super_admin' | 'program_admin' | 'mentor'
 
 export interface Admin {
   id: string
@@ -124,9 +124,23 @@ export interface Team {
   marketFocus: string | null
   members: TeamMember[]
   pivots: TeamPivot[]
+  mentor: string | Admin | null
   isDissolved: boolean
   status: TeamStatus
   createdBy: string | Admin
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MentorSession {
+  id: string
+  team: string
+  cohort: string
+  mentor: string | Admin
+  sessionDate: string
+  notes: string | null
+  actionItems: string[]
+  loggedBy: string | Admin | null
   createdAt: string
   updatedAt: string
 }

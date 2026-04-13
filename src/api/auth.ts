@@ -1,6 +1,8 @@
 import api from './client'
 import type { Admin, ApiResponse } from '@/types'
 
+export type { Admin }
+
 interface LoginPayload {
   email: string
   password: string
@@ -44,4 +46,7 @@ export const authApi = {
 
   resendInvite: (adminId: string) =>
     api.post<ApiResponse<null>>('/auth/resend-invite', { adminId }),
+
+  listAdmins: () =>
+    api.get<ApiResponse<Admin[]>>('/auth/admins'),
 }
