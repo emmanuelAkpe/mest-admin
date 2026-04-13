@@ -15,31 +15,57 @@ interface TraineeField {
 }
 
 const TRAINEE_FIELDS: TraineeField[] = [
-  { key: 'firstName',           label: 'First Name',           required: true  },
-  { key: 'lastName',            label: 'Last Name',            required: true  },
-  { key: 'email',               label: 'Email',                required: true  },
-  { key: 'country',             label: 'Country',              required: true  },
-  { key: 'bio',                 label: 'Bio',                  required: false },
-  { key: 'technicalBackground', label: 'Technical Background', required: false },
-  { key: 'aiSkillLevel',        label: 'AI Skill Level',       required: false },
-  { key: 'entryScore',          label: 'Entry Score',          required: false },
-  { key: 'linkedIn',            label: 'LinkedIn',             required: false },
-  { key: 'github',              label: 'GitHub',               required: false },
-  { key: 'portfolio',           label: 'Portfolio',            required: false },
+  { key: 'firstName',           label: 'First Name',              required: true  },
+  { key: 'lastName',            label: 'Last Name',               required: true  },
+  { key: 'country',             label: 'Country',                 required: true  },
+  { key: 'email',               label: 'Email',                   required: false },
+  { key: 'bio',                 label: 'Experience / Bio',        required: false },
+  { key: 'education',           label: 'Education',               required: false },
+  { key: 'top3Skills',          label: 'Top 3 Skills',            required: false },
+  { key: 'coreTechSkills',      label: 'Core Tech Skills',        required: false },
+  { key: 'industriesOfInterest',label: 'Industries of Interest',  required: false },
+  { key: 'whyMEST',             label: 'Why MEST',                required: false },
+  { key: 'funFact',             label: 'Fun Fact',                required: false },
+  { key: 'technicalBackground', label: 'Technical Background',    required: false },
+  { key: 'aiSkillLevel',        label: 'AI Skill Level',          required: false },
+  { key: 'entryScore',          label: 'Entry Score',             required: false },
+  { key: 'linkedIn',            label: 'LinkedIn',                required: false },
+  { key: 'github',              label: 'GitHub',                  required: false },
+  { key: 'portfolio',           label: 'Portfolio',               required: false },
 ]
 
 const AUTO_MAP: Record<string, keyof CreateTraineePayload> = {
-  firstname: 'firstName',  first_name: 'firstName',  'first name': 'firstName',
-  lastname: 'lastName',    last_name: 'lastName',    'last name': 'lastName',  surname: 'lastName',
-  email: 'email',          'e-mail': 'email',        'email address': 'email',
-  country: 'country',      nation: 'country',
-  bio: 'bio',              biography: 'bio',         about: 'bio',
-  technicalbackground: 'technicalBackground', technical: 'technicalBackground', techbackground: 'technicalBackground',
-  aiskill: 'aiSkillLevel', aiskilllevel: 'aiSkillLevel', 'ai skill': 'aiSkillLevel', 'ai level': 'aiSkillLevel',
-  entryscore: 'entryScore', 'entry score': 'entryScore', score: 'entryScore',
-  linkedin: 'linkedIn',    'linkedin url': 'linkedIn',
-  github: 'github',        'github url': 'github',
-  portfolio: 'portfolio',  website: 'portfolio',    'portfolio url': 'portfolio',
+  // First / Last name
+  firstname: 'firstName',       first_name: 'firstName',       'first name': 'firstName',
+  lastname: 'lastName',         last_name: 'lastName',         'last name': 'lastName',   surname: 'lastName',
+  // Email
+  email: 'email',               'e-mail': 'email',             'email address': 'email',
+  // Country
+  country: 'country',           nation: 'country',
+  // Bio / experience
+  bio: 'bio',                   biography: 'bio',              about: 'bio',
+  experience: 'bio',            'experience/bio': 'bio',       'experience / bio': 'bio',
+  // Education
+  education: 'education',
+  // Skills
+  'top 3 skills': 'top3Skills',       top3skills: 'top3Skills',       'top3 skills': 'top3Skills',
+  'core tech skills': 'coreTechSkills', coretechskills: 'coreTechSkills', 'core tech': 'coreTechSkills',
+  'tech skills': 'coreTechSkills',
+  // Industries
+  'industries of interest': 'industriesOfInterest', industriesofinterest: 'industriesOfInterest',
+  industries: 'industriesOfInterest',
+  // Why MEST
+  'why mest': 'whyMEST',        whymest: 'whyMEST',
+  // Fun fact
+  'fun fact': 'funFact',        funfact: 'funFact',
+  // Technical levels
+  technicalbackground: 'technicalBackground', technical: 'technicalBackground',
+  aiskill: 'aiSkillLevel',      aiskilllevel: 'aiSkillLevel',  'ai skill': 'aiSkillLevel',
+  // Score / socials
+  entryscore: 'entryScore',     'entry score': 'entryScore',   score: 'entryScore',
+  linkedin: 'linkedIn',         'linkedin url': 'linkedIn',
+  github: 'github',             'github url': 'github',
+  portfolio: 'portfolio',       website: 'portfolio',
 }
 
 type Step = 'upload' | 'map' | 'preview' | 'importing' | 'done'
@@ -101,17 +127,23 @@ export function CsvImportModal({ onClose }: Props) {
     }
     const entryRaw = get('entryScore')
     return {
-      firstName:           get('firstName'),
-      lastName:            get('lastName'),
-      email:               get('email'),
-      country:             get('country'),
-      bio:                 get('bio') || undefined,
-      technicalBackground: (get('technicalBackground') as any) || undefined,
-      aiSkillLevel:        (get('aiSkillLevel') as any) || undefined,
-      entryScore:          entryRaw ? Number(entryRaw) : undefined,
-      linkedIn:            get('linkedIn') || undefined,
-      github:              get('github') || undefined,
-      portfolio:           get('portfolio') || undefined,
+      firstName:            get('firstName'),
+      lastName:             get('lastName'),
+      email:                get('email') || undefined,
+      country:              get('country'),
+      bio:                  get('bio') || undefined,
+      education:            get('education') || undefined,
+      top3Skills:           get('top3Skills') || undefined,
+      coreTechSkills:       get('coreTechSkills') || undefined,
+      industriesOfInterest: get('industriesOfInterest') || undefined,
+      whyMEST:              get('whyMEST') || undefined,
+      funFact:              get('funFact') || undefined,
+      technicalBackground:  (get('technicalBackground') as any) || undefined,
+      aiSkillLevel:         (get('aiSkillLevel') as any) || undefined,
+      entryScore:           entryRaw ? Number(entryRaw) : undefined,
+      linkedIn:             get('linkedIn') || undefined,
+      github:               get('github') || undefined,
+      portfolio:            get('portfolio') || undefined,
     }
   }
 

@@ -11,7 +11,7 @@ export interface TraineesQuery {
 export interface CreateTraineePayload {
   firstName: string
   lastName: string
-  email: string
+  email?: string
   country: string
   photo?: string
   bio?: string
@@ -20,12 +20,12 @@ export interface CreateTraineePayload {
   coreTechSkills?: string
   industriesOfInterest?: string
   whyMEST?: string
+  funFact?: string
   technicalBackground?: TechnicalLevel
   aiSkillLevel?: AiSkillLevel
   linkedIn?: string
   github?: string
   portfolio?: string
-  funFact?: string
   entryScore?: number
   notes?: string
 }
