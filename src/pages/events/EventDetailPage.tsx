@@ -22,6 +22,7 @@ import {
   ExternalLink,
   Send,
   Sparkles,
+  Loader2,
   TrendingUp,
   TrendingDown,
   Lightbulb,
@@ -481,7 +482,7 @@ function KpiPanel({ eventId }: { eventId: string }) {
     queryFn: () => kpisApi.listByEvent(eventId),
   })
 
-  const rawKpis = data?.data?.data?.kpis ?? []
+  const rawKpis = data?.data?.data ?? []
   const kpis: Kpi[] = Array.isArray(rawKpis) ? rawKpis : []
 
   const { mutate: deleteKpi } = useMutation({
@@ -599,6 +600,40 @@ function KpiForm({
   const [rubric, setRubric] = useState<{ score: string; label: string; description: string }[]>(
     existing?.rubric?.map((r) => ({ score: String(r.score), label: r.label, description: r.description ?? '' })) ?? []
   )
+  const [generating, setGenerating] = useState<string | null>(null)
+
+  async function generateDescription() {
+    if (!name.trim()) return
+    setGenerating('description')
+    try {
+      const res = await kpisApi.generate(eventId, { name: name.trim(), scaleType, appliesTo })
+      const suggestion = res.data?.data
+      if (suggestion?.description) setDescription(suggestion.description)
+    } catch (err) {
+      console.error('AI generation failed:', err)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  async function generateRubricRow(i: number) {
+    if (!name.trim()) return
+    setGenerating(`row-${i}`)
+    try {
+      const res = await kpisApi.generate(eventId, { name: name.trim(), scaleType, appliesTo })
+      const suggestion = res.data?.data
+      const scoreNum = Number(rubric[i]?.score)
+      const matched = suggestion?.rubric?.find(r => r.score === scoreNum)
+      if (matched) {
+        updateRubricRow(i, 'label', matched.label)
+        updateRubricRow(i, 'description', matched.description)
+      }
+    } catch (err) {
+      console.error('AI generation failed:', err)
+    } finally {
+      setGenerating(null)
+    }
+  }
 
   const scalePoints: number[] = scaleType === '1_to_5' ? [1, 2, 3, 4, 5]
     : scaleType === '1_to_10' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -654,7 +689,23 @@ function KpiForm({
         <div className="col-span-2">
           <input className={inputCls} placeholder="KPI name *" required value={name} onChange={e => setName(e.target.value)} />
         </div>
-        <input className={inputCls} placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
+        <div className="relative">
+          <input
+            className={`${inputCls} pr-8`}
+            placeholder="Description (optional)"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={!name.trim() || generating !== null}
+            onClick={generateDescription}
+            title="Generate description with AI"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-300 transition-colors hover:text-[#0d968b] disabled:opacity-30"
+          >
+            {generating === 'description' ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0d968b]" /> : <Sparkles className="h-3.5 w-3.5" />}
+          </button>
+        </div>
         <input className={inputCls} type="number" min="0" step="0.1" placeholder="Weight *" required value={weight} onChange={e => setWeight(e.target.value)} />
         <select className={selectCls} value={scaleType} onChange={e => setScaleType(e.target.value as ScaleType)}>
           <option value="1_to_10">Scale 1–10</option>
@@ -718,6 +769,15 @@ function KpiForm({
                     onChange={(e) => updateRubricRow(i, 'description', e.target.value)}
                   />
                 </div>
+                <button
+                  type="button"
+                  disabled={!name.trim() || generating !== null}
+                  onClick={() => generateRubricRow(i)}
+                  title="Generate label & description with AI"
+                  className="mt-1 text-slate-300 transition-colors hover:text-[#0d968b] disabled:opacity-30"
+                >
+                  {generating === `row-${i}` ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#0d968b]" /> : <Sparkles className="h-3.5 w-3.5" />}
+                </button>
                 <button
                   type="button"
                   onClick={() => removeRubricRow(i)}

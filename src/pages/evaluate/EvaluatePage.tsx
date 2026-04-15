@@ -9,6 +9,12 @@ const TEAL = '#0d968b'
 const API = mest_server
 
 /* ── Types ── */
+interface KpiRubricItem {
+  score: number
+  label: string
+  description: string
+}
+
 interface KpiDef {
   id: string
   name: string
@@ -19,6 +25,7 @@ interface KpiDef {
   scaleMax: number | null
   requireComment: boolean
   order: number
+  rubric: KpiRubricItem[]
 }
 
 interface TeamMember {
@@ -118,7 +125,7 @@ function Header({ eventName, evaluatorName }: { eventName?: string; evaluatorNam
 }
 
 /* ══════════════════════════════════════════════
-   KPI SLIDER CARD
+   KPI SCORE CARD
 ══════════════════════════════════════════════ */
 function KpiCard({
   kpi, score, comment, onChange,
@@ -129,8 +136,11 @@ function KpiCard({
   onChange: (score: number, comment: string) => void
 }) {
   const { min, max } = scaleRange(kpi)
-  const pct = ((score - min) / (max - min)) * 100
+  const [hovered, setHovered] = useState<number | null>(null)
   const ticks = Array.from({ length: max - min + 1 }, (_, i) => min + i)
+
+  const activeScore = hovered ?? score
+  const rubricItem = kpi.rubric?.find(r => r.score === activeScore)
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
@@ -144,27 +154,45 @@ function KpiCard({
         </span>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-400 uppercase font-semibold tracking-wide">Score</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Score</span>
           <span className="text-2xl font-extrabold tabular-nums" style={{ color: TEAL }}>{score}</span>
         </div>
-        <input
-          type="range" min={min} max={max} step={1} value={score}
-          onChange={(e) => onChange(Number(e.target.value), comment)}
-          className="w-full h-2 rounded-lg cursor-pointer appearance-none bg-slate-200"
-          style={{ accentColor: TEAL }}
-        />
-        <div className="flex justify-between px-0.5">
-          {ticks.map((t) => (
-            <span key={t} className="text-[9px] font-bold transition-colors"
-              style={{ color: t === score ? TEAL : '#cbd5e1' }}>{t}</span>
-          ))}
+
+        {/* Clickable number buttons */}
+        <div className="flex flex-wrap gap-1.5">
+          {ticks.map((t) => {
+            const isSelected = t === score
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onChange(t, comment)}
+                onMouseEnter={() => setHovered(t)}
+                onMouseLeave={() => setHovered(null)}
+                className="flex h-9 min-w-[2.25rem] items-center justify-center rounded-lg border px-2 text-sm font-bold transition-all"
+                style={
+                  isSelected
+                    ? { backgroundColor: TEAL, borderColor: TEAL, color: '#fff' }
+                    : { backgroundColor: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' }
+                }
+              >
+                {t}
+              </button>
+            )
+          })}
         </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full transition-all duration-150"
-            style={{ width: `${pct}%`, backgroundColor: TEAL }} />
-        </div>
+
+        {/* Rubric hint for hovered/selected score */}
+        {rubricItem && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 transition-all">
+            <p className="text-xs font-semibold" style={{ color: TEAL }}>{rubricItem.label}</p>
+            {rubricItem.description && (
+              <p className="mt-0.5 text-xs text-slate-500">{rubricItem.description}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div>

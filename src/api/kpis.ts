@@ -15,9 +15,14 @@ export interface CreateKpiPayload {
   rubric?: KpiRubricItem[]
 }
 
+export interface KpiSuggestion {
+  description: string
+  rubric: { score: number; label: string; description: string }[]
+}
+
 export const kpisApi = {
   listByEvent: (eventId: string) =>
-    api.get<ApiResponse<{ kpis: Kpi[] }>>(`/events/${eventId}/kpis`),
+    api.get<ApiResponse<Kpi[]>>(`/events/${eventId}/kpis`),
 
   create: (eventId: string, payload: CreateKpiPayload) =>
     api.post<ApiResponse<{ kpi: Kpi }>>(`/events/${eventId}/kpis`, payload),
@@ -26,4 +31,7 @@ export const kpisApi = {
     api.put<ApiResponse<{ kpi: Kpi }>>(`/kpis/${id}`, payload),
 
   delete: (id: string) => api.delete<ApiResponse<null>>(`/kpis/${id}`),
+
+  generate: (eventId: string, payload: { name: string; scaleType: ScaleType; appliesTo: KpiAppliesTo }) =>
+    api.post<ApiResponse<KpiSuggestion>>(`/events/${eventId}/kpis/generate`, payload),
 }

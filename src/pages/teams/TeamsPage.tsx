@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, Target, Plus, Search, GitBranch, ArrowRight, Network, ChevronRight, UserX, Send, Check, Loader2, UserPlus } from 'lucide-react'
+import {
+  Plus, Search, Network, UserX, Send, Check, Loader2, UserPlus,
+  ChevronRight, ChevronDown, GitBranch,
+} from 'lucide-react'
 import { teamsApi } from '@/api/teams'
 import { eventsApi } from '@/api/events'
 import { traineesApi } from '@/api/trainees'
@@ -12,201 +15,261 @@ import { CreateTeamModal } from './CreateTeamModal'
 import type { Team, Trainee, Event } from '@/types'
 
 const TEAL = '#0d968b'
-const TEAL_DARK = '#0b847a'
 
-const STATUS_ACCENT: Record<Team['status'], string> = {
-  active:      TEAL,
+const STATUS_COLOR: Record<Team['status'], string> = {
+  active:      '#10b981',
   completed:   '#2563eb',
   not_started: '#94a3b8',
   dissolved:   '#ef4444',
 }
-
 const STATUS_LABEL: Record<Team['status'], string> = {
-  active: 'Active', completed: 'Completed', not_started: 'Not Started', dissolved: 'Dissolved',
+  active: 'Active', completed: 'Completed', not_started: 'Not started', dissolved: 'Dissolved',
 }
+
+type StatusFilter = 'all' | Team['status']
 
 function getParentId(event: Event): string | null {
   if (!event.parentEvent) return null
   if (typeof event.parentEvent === 'string') return event.parentEvent
-  return event.parentEvent.id
+  return (event.parentEvent as { id: string }).id
 }
 
-function TeamCardSkeleton() {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-      <div className="h-1 w-full bg-slate-100" />
-      <div className="p-5 space-y-3">
-        <div className="flex items-start justify-between">
-          <Skeleton className="h-5 w-36" />
-          <Skeleton className="h-5 w-16 rounded-full" />
-        </div>
-        <Skeleton className="h-4 w-full" />
-        <div className="flex items-center gap-1 pt-2">
-          {[0,1,2].map(i => <Skeleton key={i} className={`h-8 w-8 rounded-full ${i > 0 ? '-ml-2' : ''}`} />)}
-        </div>
-        <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-3 w-12" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function TeamCard({ team }: { team: Team }) {
-  const navigate = useNavigate()
-  const displayMembers = team.members.slice(0, 5)
-  const extraCount = team.members.length - 5
-  const accent = STATUS_ACCENT[team.status]
-  const [linkSent, setLinkSent] = useState(false)
-
-  const { mutate: sendLink, isPending: isSendingLink } = useMutation({
-    mutationFn: () => teamsApi.sendProfileLink(team.id),
-    onSuccess: () => { setLinkSent(true); setTimeout(() => setLinkSent(false), 3000) },
-  })
-
-  return (
-    <div
-      onClick={() => navigate(`/teams/${team.id}`)}
-      className="group cursor-pointer rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm transition-all hover:shadow-md hover:border-slate-300"
-    >
-      <div className="h-1 w-full" style={{ backgroundColor: accent }} />
-      <div className="p-5 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-bold text-slate-900 leading-snug group-hover:text-[#0d968b] transition-colors">{team.name}</h3>
-          <span className="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase text-white" style={{ backgroundColor: accent }}>
-            {STATUS_LABEL[team.status]}
-          </span>
-        </div>
-
-        <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
-          {team.productIdea
-            ? <span className="italic">{team.productIdea}</span>
-            : <span className="italic text-slate-300">No product idea yet</span>
-          }
-        </p>
-
-        {team.marketFocus && (
-          <div className="flex items-center gap-1.5">
-            <Target className="h-3 w-3 text-slate-300 shrink-0" />
-            <span className="text-xs text-slate-400 truncate">{team.marketFocus}</span>
-          </div>
-        )}
-
-        {team.members.length > 0 ? (
-          <div className="flex items-center pt-1">
-            {displayMembers.map((m, i) => {
-              const trainee = m.trainee as Trainee
-              const name = typeof trainee === 'object' ? `${trainee.firstName} ${trainee.lastName}` : 'Member'
-              const photo = typeof trainee === 'object' ? trainee.photo : null
-              return (
-                <span key={typeof trainee === 'object' ? (trainee.id || `m-${i}`) : `m-${i}`} className={i > 0 ? '-ml-2' : ''} style={{ zIndex: displayMembers.length - i, position: 'relative' }}>
-                  <AvatarWithFallback src={photo} name={name} size="sm" className="ring-2 ring-white" />
-                </span>
-              )
-            })}
-            {extraCount > 0 && (
-              <span className="-ml-2 flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold text-white ring-2 ring-white" style={{ backgroundColor: TEAL, position: 'relative' }}>
-                +{extraCount}
-              </span>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 py-1">
-            <Users className="h-3.5 w-3.5 text-slate-300" />
-            <span className="text-xs italic text-slate-300">No members yet</span>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-          <span className="text-xs text-slate-400">{team.members.length} member{team.members.length !== 1 ? 's' : ''}</span>
-          <div className="flex items-center gap-3">
-            {team.pivots.length > 0 && (
-              <span className="flex items-center gap-1 text-xs text-slate-400">
-                <GitBranch className="h-3 w-3" /> {team.pivots.length}
-              </span>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); sendLink() }}
-              disabled={isSendingLink || team.isDissolved}
-              title="Send team profile link to team lead"
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-40"
-              style={{ color: linkSent ? '#16a34a' : '#0d968b', backgroundColor: linkSent ? '#dcfce7' : '#0d968b1a' }}
-            >
-              {isSendingLink ? <Loader2 className="h-3 w-3 animate-spin" /> : linkSent ? <Check className="h-3 w-3" /> : <Send className="h-3 w-3" />}
-              {linkSent ? 'Sent!' : 'Send Link'}
-            </button>
-            <span className="flex items-center gap-1 text-xs font-medium text-slate-400 group-hover:text-[#0d968b] transition-colors">
-              View <ArrowRight className="h-3 w-3" />
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Event tab strip ──────────────────────────────────────────────────────────
-// Shows programs with sessions nested beneath them. Standalone events are shown flat.
-function EventTabs({
+/* ── Event selector dropdown ─────────────────────────────────────────────── */
+function EventSelector({
   events,
-  selectedEventId,
-  onSelect,
+  selectedId,
+  onChange,
 }: {
   events: Event[]
-  selectedEventId: string | null
-  onSelect: (id: string) => void
+  selectedId: string | null
+  onChange: (id: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = events.find(e => e.id === selectedId)
+
+  // Close on outside click
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
   const programs = events.filter(e => (e.type === 'startup_build' || e.type === 'newco') && !e.parentEvent)
   const sessions = events.filter(e => !!e.parentEvent)
   const standalone = events.filter(e => e.type !== 'startup_build' && e.type !== 'newco' && !e.parentEvent)
 
-  const getSessionsFor = (programId: string) =>
-    sessions.filter(s => getParentId(s) === programId)
+  function getSessionsFor(programId: string) {
+    return sessions.filter(s => getParentId(s) === programId)
+  }
 
-  const renderTab = (ev: Event, indent = false) => {
-    const isSelected = ev.id === selectedEventId
+  const renderOption = (ev: Event) => {
+    const isSelected = ev.id === selectedId
     const isLive = ev.status === 'in_progress'
     return (
       <button
         key={ev.id}
-        onClick={() => onSelect(ev.id)}
-        className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${indent ? 'ml-4' : ''}`}
-        style={isSelected ? { backgroundColor: TEAL, color: '#fff' } : { backgroundColor: '#f1f5f9', color: '#475569' }}
+        onClick={() => { onChange(ev.id); setOpen(false) }}
+        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50"
       >
-        {indent && <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />}
-        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: isLive ? (isSelected ? '#fff' : TEAL) : (isSelected ? 'rgba(255,255,255,0.5)' : '#cbd5e1') }} />
-        <span className="truncate max-w-[140px]">{ev.name}</span>
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: isLive ? TEAL : '#cbd5e1' }}
+        />
+        <span className={`flex-1 truncate ${isSelected ? 'font-semibold text-slate-900' : 'text-slate-600'}`}>
+          {ev.name}
+        </span>
+        {isLive && (
+          <span className="shrink-0 rounded-full px-1.5 py-px text-[9px] font-bold uppercase"
+            style={{ backgroundColor: `${TEAL}20`, color: TEAL }}>
+            Live
+          </span>
+        )}
+        {isSelected && <Check className="h-3.5 w-3.5 shrink-0" style={{ color: TEAL }} />}
       </button>
     )
   }
 
   return (
-    <div className="flex flex-wrap gap-2 pb-1">
-      {programs.map(program => (
-        <div key={program.id} className="flex flex-wrap gap-2">
-          {renderTab(program)}
-          {getSessionsFor(program.id).map(s => renderTab(s, true))}
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+      >
+        {selected?.status === 'in_progress' && (
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: TEAL }} />
+        )}
+        <span className="max-w-[220px] truncate">{selected?.name ?? 'Select a session'}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div className="max-h-72 overflow-y-auto py-1">
+            {/* Programs with their sessions */}
+            {programs.map(program => {
+              const childSessions = getSessionsFor(program.id)
+              return (
+                <div key={program.id}>
+                  <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    {program.name}
+                  </p>
+                  {childSessions.length > 0
+                    ? childSessions.map(renderOption)
+                    : renderOption(program)}
+                </div>
+              )
+            })}
+            {/* Standalone events */}
+            {standalone.length > 0 && (
+              <div>
+                {programs.length > 0 && (
+                  <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Standalone Events
+                  </p>
+                )}
+                {standalone.map(renderOption)}
+              </div>
+            )}
+          </div>
         </div>
-      ))}
-      {standalone.map(ev => renderTab(ev))}
+      )}
     </div>
   )
 }
 
-// ── Unassigned trainees ──────────────────────────────────────────────────────
+/* ── Member avatars ──────────────────────────────────────────────────────── */
+function MemberAvatars({ members }: { members: Team['members'] }) {
+  const show = members.slice(0, 4)
+  const extra = members.length - 4
+  return (
+    <div className="flex items-center">
+      {show.map((m, i) => {
+        const t = m.trainee as Trainee
+        const name = typeof t === 'object' ? `${t.firstName} ${t.lastName}` : '?'
+        const photo = typeof t === 'object' ? t.photo : null
+        return (
+          <span key={typeof t === 'object' ? (t.id ?? `m${i}`) : `m${i}`}
+            className={i > 0 ? '-ml-1.5' : ''}
+            style={{ position: 'relative', zIndex: show.length - i }}>
+            <AvatarWithFallback src={photo} name={name} size="sm" className="ring-2 ring-white" />
+          </span>
+        )
+      })}
+      {extra > 0 && (
+        <span className="-ml-1.5 flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white ring-2 ring-white"
+          style={{ backgroundColor: '#94a3b8', position: 'relative' }}>
+          +{extra}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/* ── Team row ────────────────────────────────────────────────────────────── */
+function TeamRow({ team }: { team: Team }) {
+  const navigate = useNavigate()
+  const [linkSent, setLinkSent] = useState(false)
+
+  const { mutate: sendLink, isPending: isSending } = useMutation({
+    mutationFn: () => teamsApi.sendProfileLink(team.id),
+    onSuccess: () => { setLinkSent(true); setTimeout(() => setLinkSent(false), 3000) },
+  })
+
+  const initials = team.name.slice(0, 2).toUpperCase()
+  const color = STATUS_COLOR[team.status]
+
+  return (
+    <div
+      onClick={() => navigate(`/teams/${team.id}`)}
+      className="group flex cursor-pointer items-center gap-4 border-b border-slate-100 px-5 py-3.5 transition-colors last:border-b-0 hover:bg-slate-50"
+    >
+      {/* Team avatar */}
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+        style={{ backgroundColor: color + '22', color }}
+      >
+        {initials}
+      </div>
+
+      {/* Name + product idea */}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#0d968b] transition-colors">
+          {team.name}
+        </p>
+        <p className="truncate text-xs text-slate-400">
+          {team.productIdea
+            ? <span className="italic">{team.productIdea}</span>
+            : <span>No product idea yet</span>}
+        </p>
+      </div>
+
+      {/* Members */}
+      <div className="hidden items-center gap-2 sm:flex">
+        {team.members.length > 0
+          ? <MemberAvatars members={team.members} />
+          : <span className="text-xs text-slate-300">—</span>}
+        <span className="w-12 text-right text-xs text-slate-400">
+          {team.members.length} {team.members.length === 1 ? 'member' : 'members'}
+        </span>
+      </div>
+
+      {/* Pivots */}
+      {team.pivots.length > 0 && (
+        <div className="hidden items-center gap-1 text-xs text-slate-400 lg:flex">
+          <GitBranch className="h-3.5 w-3.5" />
+          {team.pivots.length}
+        </div>
+      )}
+
+      {/* Status */}
+      <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+        <span className="text-xs font-medium" style={{ color }}>{STATUS_LABEL[team.status]}</span>
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-2" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={() => sendLink()}
+          disabled={isSending || team.isDissolved}
+          className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-40"
+          style={{ color: linkSent ? '#16a34a' : TEAL, backgroundColor: linkSent ? '#dcfce7' : `${TEAL}12` }}
+        >
+          {isSending ? <Loader2 className="h-3 w-3 animate-spin" /> : linkSent ? <Check className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+          <span className="hidden sm:inline">{linkSent ? 'Sent' : 'Send link'}</span>
+        </button>
+        <ChevronRight className="h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500" onClick={() => navigate(`/teams/${team.id}`)} />
+      </div>
+    </div>
+  )
+}
+
+/* ── Skeleton row ────────────────────────────────────────────────────────── */
+function TeamRowSkeleton() {
+  return (
+    <div className="flex items-center gap-4 border-b border-slate-100 px-5 py-3.5 last:border-b-0">
+      <Skeleton className="h-9 w-9 rounded-lg" />
+      <div className="flex-1 space-y-1.5">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-3 w-56" />
+      </div>
+      <Skeleton className="hidden h-7 w-28 rounded-full sm:block" />
+      <Skeleton className="hidden h-4 w-16 md:block" />
+      <Skeleton className="h-7 w-20 rounded-md" />
+    </div>
+  )
+}
+
+/* ── Unassigned trainees ──────────────────────────────────────────────────── */
 function toIdString(val: unknown): string {
   if (!val) return ''
   if (typeof val === 'string') return val
-  // Plain object — try id, _id, then toString
   const o = val as Record<string, unknown>
   if (typeof o['id'] === 'string' && o['id']) return o['id']
   if (typeof o['_id'] === 'string' && o['_id']) return o['_id']
-  // ObjectId instance (has toString method returning hex)
-  if (typeof (o['_id'] as { toString?: () => string })?.toString === 'function') {
-    const s = (o['_id'] as { toString: () => string }).toString()
-    if (s.length === 24) return s
-  }
   if (typeof (val as { toString?: () => string })?.toString === 'function') {
     const s = (val as { toString: () => string }).toString()
     if (s.length === 24) return s
@@ -214,9 +277,12 @@ function toIdString(val: unknown): string {
   return ''
 }
 
-function UnassignedTrainees({ teams, cohortId, eventId }: { teams: Team[]; cohortId: string; eventId: string }) {
+function UnassignedTrainees({
+  teams, cohortId, eventId,
+}: { teams: Team[]; cohortId: string; eventId: string }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [newTeamForTrainee, setNewTeamForTrainee] = useState<string | null>(null)
 
@@ -231,18 +297,16 @@ function UnassignedTrainees({ teams, cohortId, eventId }: { teams: Team[]; cohor
     : ((traineesRaw as { data?: Trainee[] })?.data ?? [])
 
   const assignedIds = new Set<string>()
-  for (const team of teams) {
+  for (const team of teams)
     for (const m of team.members) {
       const id = toIdString(m.trainee)
       if (id) assignedIds.add(id)
     }
-  }
 
   const unassigned = allTrainees.filter(t => {
     const id = t.id || toIdString(t)
     return id && !assignedIds.has(id)
   })
-
   const assignableTeams = teams.filter(t => !t.isDissolved)
 
   const { mutate: addToTeam, isPending: isAdding } = useMutation({
@@ -255,89 +319,70 @@ function UnassignedTrainees({ teams, cohortId, eventId }: { teams: Team[]; cohor
       }))
       await teamsApi.update(team.id, { members: [...existing, { trainee: traineeId, roles: [] }] })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teams', eventId] })
-      setOpenDropdown(null)
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['teams', eventId] }); setOpenDropdown(null) },
   })
 
-  if (isLoading) {
-    return (
-      <div className="mt-8 overflow-hidden rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-        <div className="flex items-center gap-2 mb-3">
-          <UserX className="h-4 w-4 text-amber-500" />
-          <span className="text-sm font-bold text-amber-900">Without a Team</span>
-        </div>
-        <div className="space-y-2">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 rounded-lg" />)}
-        </div>
-      </div>
-    )
-  }
-
-  if (unassigned.length === 0) return null
+  if (isLoading || unassigned.length === 0) return null
 
   return (
-    <div className="mt-8 rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
-      <div className="flex items-center justify-between border-b border-amber-100 px-5 py-4">
-        <div className="flex items-center gap-2">
-          <UserX className="h-4 w-4 text-amber-600" />
-          <h2 className="font-bold text-amber-900">Without a Team</h2>
+    <div className="mt-6 overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between px-5 py-3.5 text-left"
+      >
+        <div className="flex items-center gap-2.5">
+          <UserX className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-semibold text-slate-800">Without a team</span>
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
             {unassigned.length}
           </span>
         </div>
-        <p className="text-xs text-amber-600">These trainees are not in any team for this event</p>
-      </div>
-      <div className="divide-y divide-amber-100">
-        {unassigned.map(t => (
-          <div key={t.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-amber-100/60">
-            <AvatarWithFallback src={t.photo} name={`${t.firstName} ${t.lastName}`} size="sm" />
-            <div
-              className="min-w-0 flex-1 cursor-pointer"
-              onClick={() => navigate(`/trainees/${t.id}`)}
-            >
-              <p className="truncate text-sm font-medium text-slate-800">{t.firstName} {t.lastName}</p>
-              <p className="text-xs text-slate-500">{t.country}</p>
-            </div>
-            <div className="relative shrink-0">
-              <button
-                onClick={() => setOpenDropdown(openDropdown === t.id ? null : t.id)}
-                disabled={isAdding}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-[#0d968b] bg-[#0d968b1a] transition-colors hover:bg-[#0d968b]/20 disabled:opacity-50"
-              >
-                <UserPlus className="h-3 w-3" />
-                Add to Team
-              </button>
-              {openDropdown === t.id && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
-                  <div className="absolute right-0 bottom-full z-20 mb-1 w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-                    {assignableTeams.map(team => (
-                      <button
-                        key={team.id}
-                        onClick={() => addToTeam({ traineeId: t.id, team })}
-                        disabled={isAdding}
-                        className="w-full truncate px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {team.name}
+        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-amber-100 divide-y divide-slate-100">
+          {unassigned.map(t => (
+            <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
+              <AvatarWithFallback src={t.photo} name={`${t.firstName} ${t.lastName}`} size="sm" />
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/trainees/${t.id}`)}>
+                <p className="truncate text-sm font-medium text-slate-800">{t.firstName} {t.lastName}</p>
+                <p className="text-xs text-slate-400">{t.country}</p>
+              </div>
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === t.id ? null : t.id)}
+                  disabled={isAdding}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+                  style={{ color: TEAL, backgroundColor: `${TEAL}12` }}
+                >
+                  <UserPlus className="h-3 w-3" /> Assign
+                </button>
+                {openDropdown === t.id && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                    <div className="absolute right-0 bottom-full z-20 mb-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                      {assignableTeams.map(team => (
+                        <button key={team.id} onClick={() => addToTeam({ traineeId: t.id, team })}
+                          disabled={isAdding}
+                          className="w-full truncate px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                          {team.name}
+                        </button>
+                      ))}
+                      {assignableTeams.length > 0 && <div className="my-1 border-t border-slate-100" />}
+                      <button onClick={() => { setOpenDropdown(null); setNewTeamForTrainee(t.id) }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold hover:bg-slate-50"
+                        style={{ color: TEAL }}>
+                        <Plus className="h-3.5 w-3.5" /> New team
                       </button>
-                    ))}
-                    {assignableTeams.length > 0 && <div className="my-1 border-t border-slate-100" />}
-                    <button
-                      onClick={() => { setOpenDropdown(null); setNewTeamForTrainee(t.id) }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[#0d968b] hover:bg-slate-50"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      New Team
-                    </button>
-                  </div>
-                </>
-              )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {newTeamForTrainee && (() => {
         const takenIds = new Set<string>()
@@ -355,12 +400,13 @@ function UnassignedTrainees({ teams, cohortId, eventId }: { teams: Team[]; cohor
   )
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+/* ── Page ─────────────────────────────────────────────────────────────────── */
 export function TeamsPage() {
   const { activeCohortId } = useCohortStore()
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
   const { data: eventsData, isLoading: eventsLoading } = useQuery({
     queryKey: ['events', activeCohortId],
@@ -373,7 +419,6 @@ export function TeamsPage() {
     ? (eventsRaw as Event[])
     : ((eventsRaw as { data?: Event[] })?.data ?? [])
 
-  // Auto-select: prefer a session that's in_progress, then any session, then any event
   useEffect(() => {
     if (events.length === 0) return
     if (selectedEventId && events.some(e => e.id === selectedEventId)) return
@@ -388,123 +433,133 @@ export function TeamsPage() {
     enabled: !!selectedEventId,
   })
 
-  const rawTeams = (teamsData?.data as { data?: Team[] | { teams?: Team[] } })?.data
-  const allTeams: Team[] = Array.isArray(rawTeams)
-    ? (rawTeams as Team[])
-    : (rawTeams as { teams?: Team[] })?.teams ?? []
+  const allTeams: Team[] = teamsData?.data?.data ?? []
 
-  const teams = allTeams.filter(t =>
-    !search ||
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    (t.productIdea ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = allTeams.filter(t => {
+    const matchSearch = !search
+      || t.name.toLowerCase().includes(search.toLowerCase())
+      || (t.productIdea ?? '').toLowerCase().includes(search.toLowerCase())
+    const matchStatus = statusFilter === 'all' || t.status === statusFilter
+    return matchSearch && matchStatus
+  })
 
-  const activeCount = allTeams.filter(t => t.status === 'active').length
-  const completedCount = allTeams.filter(t => t.status === 'completed').length
+  const statusCounts = {
+    active:      allTeams.filter(t => t.status === 'active').length,
+    completed:   allTeams.filter(t => t.status === 'completed').length,
+    not_started: allTeams.filter(t => t.status === 'not_started').length,
+    dissolved:   allTeams.filter(t => t.status === 'dissolved').length,
+  }
   const totalMembers = allTeams.reduce((acc, t) => acc + t.members.length, 0)
 
   if (!activeCohortId) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-        <Network className="h-12 w-12 text-slate-200" />
-        <div>
-          <p className="font-semibold text-slate-700">No cohort selected</p>
-          <p className="mt-1 text-sm text-slate-400">Select a cohort from the top bar to view its teams.</p>
-        </div>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <Network className="h-10 w-10 text-slate-200" />
+        <p className="font-semibold text-slate-700">No cohort selected</p>
+        <p className="text-sm text-slate-400">Select a cohort from the top bar to view its teams.</p>
       </div>
     )
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-900">Teams</h1>
-        {!teamsLoading && allTeams.length > 0 && (
-          <p className="mt-0.5 text-sm text-slate-500">{allTeams.length} teams · {totalMembers} members</p>
+    <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-8">
+
+      {/* ── Header ── */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-bold text-slate-900">Teams</h1>
+
+          {eventsLoading
+            ? <Skeleton className="h-8 w-40 rounded-lg" />
+            : events.length > 0 && (
+              <EventSelector
+                events={events}
+                selectedId={selectedEventId}
+                onChange={id => { setSelectedEventId(id); setSearch(''); setStatusFilter('all') }}
+              />
+            )}
+
+          {!teamsLoading && allTeams.length > 0 && (
+            <span className="text-sm text-slate-400">
+              {allTeams.length} team{allTeams.length !== 1 ? 's' : ''} · {totalMembers} member{totalMembers !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {selectedEventId && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: TEAL }}
+          >
+            <Plus className="h-4 w-4" /> New Team
+          </button>
         )}
       </div>
 
-      {/* Event tabs */}
-      {eventsLoading && (
-        <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-9 w-32 shrink-0 rounded-lg" />)}
-        </div>
-      )}
-
+      {/* ── No events ── */}
       {!eventsLoading && events.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-20 text-center">
           <Network className="mb-4 h-7 w-7 text-slate-300" />
           <p className="font-semibold text-slate-700">No events yet</p>
-          <p className="mt-1 text-sm text-slate-400">Create an event first to manage teams within it.</p>
+          <p className="mt-1 text-sm text-slate-400">Create an event first to manage teams.</p>
         </div>
       )}
 
-      {!eventsLoading && events.length > 0 && (
-        <div className="mb-5">
-          <EventTabs events={events} selectedEventId={selectedEventId} onSelect={setSelectedEventId} />
-        </div>
-      )}
-
-      {/* Teams grid */}
       {selectedEventId && (
         <>
-          {/* Stats strip — scoped to selected event */}
-          {!teamsLoading && allTeams.length > 0 && (
-            <div className="mb-5 grid grid-cols-3 gap-3">
-              {[
-                { label: 'Total Teams', value: allTeams.length, color: TEAL },
-                { label: 'Active',      value: activeCount,    color: '#16a34a' },
-                { label: 'Completed',   value: completedCount, color: '#2563eb' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
-                  <p className="mt-1 text-2xl font-extrabold" style={{ color }}>{value}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Toolbar: search + New Team */}
-          <div className="mb-5 flex items-center gap-3">
-            {!teamsLoading && allTeams.length > 3 && (
-              <div className="relative flex-1 max-w-sm">
+          {/* ── Toolbar: search + status filter ── */}
+          {(!teamsLoading && allTeams.length > 0) && (
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="relative flex-1" style={{ minWidth: '180px', maxWidth: '320px' }}>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search teams by name or product idea…"
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
+                  placeholder="Search teams…"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
                 />
               </div>
-            )}
-            <button
-              onClick={() => setShowCreate(true)}
-              className="ml-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors"
-              style={{ backgroundColor: TEAL }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = TEAL_DARK)}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = TEAL)}
-            >
-              <Plus className="h-4 w-4" />
-              New Team
-            </button>
-          </div>
 
-          {teamsLoading && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => <TeamCardSkeleton key={i} />)}
+              <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                {(['all', 'active', 'completed', 'not_started', 'dissolved'] as StatusFilter[])
+                  .filter(s => s === 'all' || statusCounts[s as Team['status']] > 0)
+                  .map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setStatusFilter(s)}
+                      className="rounded-md px-2.5 py-1 text-xs font-semibold transition-colors"
+                      style={statusFilter === s
+                        ? { backgroundColor: s === 'all' ? TEAL : STATUS_COLOR[s as Team['status']], color: '#fff' }
+                        : { color: '#64748b' }}
+                    >
+                      {s === 'all' ? 'All' : STATUS_LABEL[s as Team['status']]}
+                      {s !== 'all' && (
+                        <span className="ml-1 opacity-70">{statusCounts[s as Team['status']]}</span>
+                      )}
+                    </button>
+                  ))}
+              </div>
             </div>
           )}
 
+          {/* ── Loading ── */}
+          {teamsLoading && (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {Array.from({ length: 5 }).map((_, i) => <TeamRowSkeleton key={i} />)}
+            </div>
+          )}
+
+          {/* ── Empty state ── */}
           {!teamsLoading && allTeams.length === 0 && (
             <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-20 text-center">
               <Network className="mb-4 h-7 w-7 text-slate-300" />
               <p className="font-semibold text-slate-700">No teams yet</p>
-              <p className="mt-1 text-sm text-slate-400">Create the first team for this event.</p>
+              <p className="mt-1 text-sm text-slate-400">Create the first team for this session.</p>
               <button
                 onClick={() => setShowCreate(true)}
-                className="mt-6 flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
+                className="mt-5 flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
                 style={{ backgroundColor: TEAL }}
               >
                 <Plus className="h-4 w-4" /> New Team
@@ -512,18 +567,35 @@ export function TeamsPage() {
             </div>
           )}
 
-          {!teamsLoading && allTeams.length > 0 && teams.length === 0 && (
-            <p className="py-8 text-center text-sm italic text-slate-400">No teams match "{search}"</p>
-          )}
-
-          {!teamsLoading && teams.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {teams.map(team => <TeamCard key={team.id} team={team} />)}
+          {/* ── No filter match ── */}
+          {!teamsLoading && allTeams.length > 0 && filtered.length === 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white px-5 py-12 text-center shadow-sm">
+              <p className="text-sm font-medium text-slate-500">No teams match your filters</p>
+              <button onClick={() => { setSearch(''); setStatusFilter('all') }}
+                className="mt-2 text-sm font-semibold hover:underline" style={{ color: TEAL }}>
+                Clear filters
+              </button>
             </div>
           )}
 
-          {/* Unassigned trainees */}
-          {!teamsLoading && activeCohortId && selectedEventId && (
+          {/* ── Team list ── */}
+          {!teamsLoading && filtered.length > 0 && (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {/* Column headers */}
+              <div className="grid border-b border-slate-100 bg-slate-50 px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400"
+                style={{ gridTemplateColumns: '1fr 200px 120px 120px 100px' }}>
+                <span>Team</span>
+                <span className="hidden sm:block">Members</span>
+                <span className="hidden lg:block">Pivots</span>
+                <span className="hidden md:block">Status</span>
+                <span />
+              </div>
+              {filtered.map(team => <TeamRow key={team.id} team={team} />)}
+            </div>
+          )}
+
+          {/* ── Unassigned ── */}
+          {!teamsLoading && activeCohortId && (
             <UnassignedTrainees key={selectedEventId} teams={allTeams} cohortId={activeCohortId} eventId={selectedEventId} />
           )}
         </>

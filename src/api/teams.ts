@@ -17,7 +17,7 @@ export interface LogPivotPayload {
 
 export const teamsApi = {
   listByEvent: (eventId: string) =>
-    api.get<ApiResponse<{ teams: Team[] }>>(`/events/${eventId}/teams`),
+    api.get<ApiResponse<Team[]>>(`/events/${eventId}/teams`),
 
   get: (id: string) => api.get<ApiResponse<{ team: Team }>>(`/teams/${id}`),
 

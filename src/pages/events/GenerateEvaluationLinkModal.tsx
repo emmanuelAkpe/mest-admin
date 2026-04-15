@@ -52,7 +52,7 @@ export function GenerateEvaluationLinkModal({ eventId, onClose }: Props) {
     queryFn: () => teamsApi.listByEvent(eventId),
     staleTime: 60_000,
   })
-  const rawTeams = teamsData?.data?.data?.teams ?? []
+  const rawTeams = teamsData?.data?.data ?? []
   const teams: Team[] = Array.isArray(rawTeams) ? rawTeams : []
   const teamIds = teams.map((t) => t.id)
 
