@@ -44,6 +44,7 @@ export interface TeamPortalEvent {
     kpis: TeamPortalKpi[]
     overallComments: string[]
     evaluators: TeamPortalEvaluator[]
+    feedbackStatus: { total: number; submitted: number; pending: number }
     insight: TeamPortalInsight | null
   }
   deliverables: TeamPortalDeliverable[]

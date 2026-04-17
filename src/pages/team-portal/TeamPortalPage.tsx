@@ -421,6 +421,9 @@ function EventCard({ entry, token, onRefresh }: { entry: TeamPortalEvent; token:
     return !d.submitted && ms > 0 && ms <= 48 * 3600 * 1000
   }).length
 
+  const { feedbackStatus } = evaluation
+  const hasPending = feedbackStatus.pending > 0
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {/* Event header */}
@@ -493,15 +496,41 @@ function EventCard({ entry, token, onRefresh }: { entry: TeamPortalEvent; token:
                 )}
 
                 {/* Per-evaluator feedback with avatars */}
-                {evaluation.evaluators.length > 0 && (
+                {(evaluation.evaluators.length > 0 || feedbackStatus.total > 0) && (
                   <div>
-                    <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                      <MessageSquare className="h-3 w-3" style={{ color: TEAL }} />
-                      Expert Feedback
+                    <div className="mb-2 flex items-center gap-2 flex-wrap">
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                        <MessageSquare className="h-3 w-3" style={{ color: TEAL }} />
+                        Expert Feedback
+                      </p>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                        {evaluation.evaluators.length} expert{evaluation.evaluators.length > 1 ? 's' : ''}
+                        {feedbackStatus.submitted} of {feedbackStatus.total} submitted
                       </span>
-                    </p>
+                      {hasPending && (
+                        <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
+                          <Clock className="h-3 w-3" />
+                          {feedbackStatus.pending} still to come
+                        </span>
+                      )}
+                    </div>
+
+                    {hasPending && (
+                      <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                        <div className="flex -space-x-2 shrink-0">
+                          {Array.from({ length: Math.min(feedbackStatus.pending, 3) }).map((_, i) => (
+                            <div key={i} className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-200">
+                              <Clock className="h-3.5 w-3.5 text-slate-400" />
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-amber-700">
+                          {feedbackStatus.pending === 1
+                            ? '1 expert hasn\'t submitted yet — their feedback will appear here when ready.'
+                            : `${feedbackStatus.pending} experts haven't submitted yet — their feedback will appear here when ready.`}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       {evaluation.evaluators.map((ev, i) => (
                         <EvaluatorCard key={i} evaluator={ev} index={i} />
