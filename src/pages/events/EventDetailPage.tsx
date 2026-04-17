@@ -46,6 +46,8 @@ import { useCohortStore } from '@/store/cohort'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { CreateEventModal } from './CreateEventModal'
 import { GenerateEvaluationLinkModal } from './GenerateEvaluationLinkModal'
+import { EvalFeedbackModal } from './EvalFeedbackModal'
+import { SendFeedbackPreviewModal } from './SendFeedbackPreviewModal'
 import { CreateDeliverableModal } from './CreateDeliverableModal'
 import type { Event, EventStatus, EventType, Team, TeamStatus, Kpi, ScaleType, KpiAppliesTo, EvaluationLink, EvaluationLinkStatus, Deliverable, SubmissionLink, Cohort } from '@/types'
 
@@ -1235,19 +1237,21 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
   const [resendError, setResendError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'links' | 'results' | 'insights'>('links')
   const [exportingEvals, setExportingEvals] = useState(false)
+  const [feedbackLink, setFeedbackLink] = useState<EvaluationLink | null>(null)
+  const [showSendPreview, setShowSendPreview] = useState(false)
 
   const { data: linksData, isLoading: linksLoading } = useQuery({
     queryKey: ['eval-links', eventId],
     queryFn: () => evaluationLinksApi.listByEvent(eventId),
     staleTime: 30_000,
   })
-  const rawLinks = linksData?.data?.data?.links ?? []
-  const links: EvaluationLink[] = Array.isArray(rawLinks) ? rawLinks : []
+  const links: EvaluationLink[] = Array.isArray(linksData?.data?.data) ? linksData.data.data : []
+  const hasSubmissions = links.some((l) => l.status === 'submitted')
 
   const { data: resultsData, isLoading: resultsLoading } = useQuery({
     queryKey: ['eval-results', eventId],
     queryFn: () => evaluationLinksApi.results(eventId),
-    enabled: activeView === 'results',
+    enabled: activeView === 'results' || hasSubmissions,
     staleTime: 30_000,
   })
   const results = (resultsData?.data as { data?: EvalResults })?.data ?? null
@@ -1265,6 +1269,7 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
     mutationFn: () => evaluationLinksApi.generateInsights(eventId),
     onSuccess: () => refetchInsights(),
   })
+
 
   const { mutate: revoke } = useMutation({
     mutationFn: (id: string) => evaluationLinksApi.revoke(id),
@@ -1315,13 +1320,23 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setShowGenerate(true)}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white"
-          style={{ backgroundColor: TEAL }}
-        >
-          <Link2 className="h-3.5 w-3.5" /> Generate Link
-        </button>
+        <div className="flex items-center gap-2">
+          {hasSubmissions && (
+            <button
+              onClick={() => setShowSendPreview(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              <Send className="h-3.5 w-3.5" /> Send to Teams
+            </button>
+          )}
+          <button
+            onClick={() => setShowGenerate(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white"
+            style={{ backgroundColor: TEAL }}
+          >
+            <Link2 className="h-3.5 w-3.5" /> Generate Link
+          </button>
+        </div>
       </div>
 
       {activeView === 'links' && (
@@ -1375,8 +1390,8 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
                   .filter(Boolean)
                   .join(', ')
                 return (
-                  <div key={link.id} className={`px-5 py-4 ${link.isRevoked ? 'opacity-50' : ''}`}>
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={link.id} className={`${link.isRevoked ? 'opacity-50' : ''}`}>
+                    <div className="flex items-start justify-between gap-3 px-5 py-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-semibold text-slate-900">{link.evaluatorName}</p>
@@ -1390,48 +1405,57 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
                           <p className="mt-0.5 text-xs text-slate-400">{link.evaluatorEmail}</p>
                         )}
                         {teamNames && (
-                          <p className="mt-0.5 text-xs text-slate-400">
-                            Teams: {teamNames}
-                          </p>
+                          <p className="mt-0.5 text-xs text-slate-400">Teams: {teamNames}</p>
                         )}
                         <p className="mt-0.5 text-xs text-slate-400">
                           Expires {format(parseISO(link.expiresAt), 'MMM d, yyyy')}
                         </p>
                       </div>
-                      {!link.isRevoked && (
-                        <div className="flex shrink-0 items-center gap-1">
+                      <div className="flex shrink-0 flex-wrap items-center gap-1">
+                        {link.status === 'submitted' && !link.isRevoked && (
                           <button
-                            onClick={() => copyLink(link.evalUrl ?? `${window.location.origin}/evaluate/${link.id}`, link.id)}
-                            className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-slate-50"
-                            title="Copy link"
+                            onClick={() => setFeedbackLink(link)}
+                            className="flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[11px] font-semibold text-teal-700 transition-colors hover:bg-teal-100"
                           >
-                            {copiedId === link.id
-                              ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Copied</>
-                              : <><Copy className="h-3 w-3" /> Copy</>}
+                            <ChevronDown className="h-3 w-3" /> View Feedback
                           </button>
-                          {link.evaluatorEmail && (
+                        )}
+                        {!link.isRevoked && (
+                          <>
                             <button
-                              onClick={() => resendLink(link.id)}
-                              disabled={!!resendingId || resentId === link.id}
-                              className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-slate-50 disabled:opacity-60"
-                              title={`Resend to ${link.evaluatorEmail}`}
+                              onClick={() => copyLink(link.evalUrl ?? `${window.location.origin}/evaluate/${link.id}`, link.id)}
+                              className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-slate-50"
+                              title="Copy link"
                             >
-                              {resendingId === link.id
-                                ? <><div className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" /> Sending…</>
-                                : resentId === link.id
-                                  ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Sent</>
-                                  : <><Send className="h-3 w-3" /> Resend</>}
+                              {copiedId === link.id
+                                ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Copied</>
+                                : <><Copy className="h-3 w-3" /> Copy</>}
                             </button>
-                          )}
-                          <button
-                            onClick={() => revoke(link.id)}
-                            className="rounded-md border border-red-200 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 transition-colors hover:bg-red-50"
-                          >
-                            Revoke
-                          </button>
-                        </div>
-                      )}
+                            {link.evaluatorEmail && (
+                              <button
+                                onClick={() => resendLink(link.id)}
+                                disabled={!!resendingId || resentId === link.id}
+                                className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-slate-50 disabled:opacity-60"
+                                title={`Resend to ${link.evaluatorEmail}`}
+                              >
+                                {resendingId === link.id
+                                  ? <><div className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" /> Sending…</>
+                                  : resentId === link.id
+                                    ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Sent</>
+                                    : <><Send className="h-3 w-3" /> Resend</>}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => revoke(link.id)}
+                              className="rounded-md border border-red-200 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 transition-colors hover:bg-red-50"
+                            >
+                              Revoke
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
+
                   </div>
                 )
               })}
@@ -1536,6 +1560,21 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
         <GenerateEvaluationLinkModal
           eventId={eventId}
           onClose={() => setShowGenerate(false)}
+        />
+      )}
+
+      {feedbackLink && (
+        <EvalFeedbackModal
+          link={feedbackLink}
+          onClose={() => setFeedbackLink(null)}
+        />
+      )}
+
+      {showSendPreview && (
+        <SendFeedbackPreviewModal
+          eventId={eventId}
+          teamIds={results?.teamResults.map((t) => t.teamId) ?? []}
+          onClose={() => setShowSendPreview(false)}
         />
       )}
     </div>
@@ -1822,6 +1861,7 @@ interface EvalResults {
       avgScore: number | null
       scoreCount: number
       divergent: boolean
+      entries: Array<{ evaluatorName: string; score: number; comment: string | null; recommendation: string | null }>
     }>
   }>
 }
@@ -1837,6 +1877,20 @@ function SessionDetailView({
 }) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<SessionTab>('overview')
+  const [portalSentTeams, setPortalSentTeams] = useState<Set<string>>(new Set())
+  const [sendingPortalTeam, setSendingPortalTeam] = useState<string | null>(null)
+
+  async function sendPortalInvite(teamId: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (sendingPortalTeam === teamId) return
+    setSendingPortalTeam(teamId)
+    try {
+      await teamsApi.sendPortalInvite(teamId)
+      setPortalSentTeams((prev) => new Set([...prev, teamId]))
+    } catch { /* ignore */ } finally {
+      setSendingPortalTeam(null)
+    }
+  }
 
   const startDate = parseISO(event.startDate)
   const endDate = parseISO(event.endDate)
@@ -2055,6 +2109,18 @@ function SessionDetailView({
                 </p>
               </div>
               <TeamStatusBadge status={team.status} />
+              <button
+                onClick={(e) => sendPortalInvite(team.id, e)}
+                disabled={sendingPortalTeam === team.id || portalSentTeams.has(team.id)}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-60"
+                title="Send portal access link to team members"
+              >
+                {sendingPortalTeam === team.id
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : portalSentTeams.has(team.id)
+                    ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Sent</>
+                    : <><ExternalLink className="h-3 w-3" /> Portal</>}
+              </button>
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
             </div>
           ))}

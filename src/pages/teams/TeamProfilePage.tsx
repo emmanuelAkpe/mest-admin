@@ -6,7 +6,7 @@ import {
   UserPlus, Pencil, Check, X as XIcon, UserMinus, UserCheck, RefreshCw,
   MessageSquare, Trash2, ChevronDown, ChevronUp, Star, AlertCircle, TrendingUp, MessageCircle,
   Link2, Upload, Clock, Copy, CheckCheck, Film, FileText, Image, Table, Globe, File,
-  Users, LayoutDashboard, History, FlameKindling, BookUser, Plus, CalendarCheck,
+  Users, LayoutDashboard, History, FlameKindling, BookUser, Plus, CalendarCheck, ExternalLink,
 } from 'lucide-react'
 import { teamsApi } from '@/api/teams'
 import { authApi } from '@/api/auth'
@@ -525,6 +525,12 @@ export function TeamProfilePage() {
     mutationFn: () => teamsApi.dissolve(id!),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['team', id] }); setShowDissolve(false) },
     onError: (e: unknown) => setDissolveError(e instanceof Error ? e.message : 'Failed to dissolve team'),
+  })
+
+  const [portalInviteSent, setPortalInviteSent] = useState(false)
+  const { mutate: sendPortalInvite, isPending: sendingPortalInvite } = useMutation({
+    mutationFn: () => teamsApi.sendPortalInvite(id!),
+    onSuccess: () => { setPortalInviteSent(true); setTimeout(() => setPortalInviteSent(false), 3000) },
   })
 
 
@@ -1355,6 +1361,15 @@ export function TeamProfilePage() {
                     <button onClick={() => setShowDissolve(true)}
                       className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50">
                       <Trash2 className="h-3 w-3" /> Dissolve
+                    </button>
+                    <button
+                      onClick={() => sendPortalInvite()}
+                      disabled={sendingPortalInvite || portalInviteSent}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {portalInviteSent
+                        ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Sent!</>
+                        : <><ExternalLink className="h-3 w-3" /> Send Portal Access</>}
                     </button>
                   </>
                 )}

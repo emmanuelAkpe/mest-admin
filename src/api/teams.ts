@@ -57,6 +57,9 @@ export const teamsApi = {
   assignMentor: (id: string, mentorId: string | null) =>
     api.patch<ApiResponse<{ id: string; mentor: Team['mentor'] }>>(`/teams/${id}/mentor`, { mentorId }),
 
+  sendPortalInvite: (id: string) =>
+    api.post<ApiResponse<{ sentTo: number }>>(`/teams/${id}/portal-invite`),
+
   // Mentor sessions
   listMentorSessions: (teamId: string) =>
     api.get<ApiResponse<MentorSession[]>>(`/teams/${teamId}/mentor-sessions`),

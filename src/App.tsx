@@ -22,6 +22,7 @@ import { CompleteTeamPage } from '@/pages/complete-team/CompleteTeamPage'
 import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { TraineePortalPage } from '@/pages/trainee-portal/TraineePortalPage'
+import { TeamPortalPage } from '@/pages/team-portal/TeamPortalPage'
 import { ProgrammeManagerPage } from '@/pages/cohorts/ProgrammeManagerPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/complete-profile/:token" element={<CompleteProfilePage />} />
       <Route path="/complete-team/:token" element={<CompleteTeamPage />} />
       <Route path="/trainee-portal" element={<TraineePortalPage />} />
+      <Route path="/team-portal" element={<TeamPortalPage />} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
