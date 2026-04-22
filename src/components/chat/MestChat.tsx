@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
 import { MessageCircle, Sparkles, X, Plus, Send, Loader2, Clock, ChevronLeft } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
-import { streamChat, listSessions, loadSession, type SSEEvent, type ChatSession } from '@/api/chat'
+import { startChat, pollChat, listSessions, loadSession, type AgentEvent, type ChatSession } from '@/api/chat'
 
 const TEAL = '#0d968b'
 
@@ -373,68 +373,64 @@ export function MestChat({
       setActiveTools(new Set())
       setView('chat')
 
-      let currentSessionId = sessionId
       const modelMsgId = `model-${Date.now()}`
-      let responseReceived = false
 
       try {
-        await streamChat({
+        const { jobId, sessionId: newSessionId } = await startChat({
           message: text.trim(),
-          sessionId: currentSessionId,
+          sessionId,
           context: context ?? {},
           token,
-          onEvent: (event: SSEEvent) => {
-            switch (event.type) {
-              case 'session':
-                currentSessionId = event.sessionId
-                setSessionId(event.sessionId)
-                break
-              case 'tool_start':
-                setActiveTools((prev) => new Set([...prev, event.name]))
-                break
-              case 'tool_done':
-                setActiveTools((prev) => {
-                  const next = new Set(prev)
-                  next.delete(event.name)
-                  return next
-                })
-                break
-              case 'response':
-                responseReceived = true
-                setShowTypingDots(false)
-                setActiveTools(new Set())
-                setMessages((prev) => [
-                  ...prev,
-                  { id: modelMsgId, role: 'model', content: event.text, displayContent: '', isTyping: true },
-                ])
-                startTypewriter(modelMsgId, event.text)
-                break
-              case 'error':
-                setShowTypingDots(false)
-                setActiveTools(new Set())
-                setMessages((prev) => [
-                  ...prev,
-                  { id: `err-${Date.now()}`, role: 'model', content: event.message, displayContent: event.message },
-                ])
-                break
-              case 'done':
-                setStreaming(false)
-                setShowTypingDots(false)
-                break
-            }
-          },
         })
-      } catch {
-        // Only show the error if we never received a response — if we did, the
-        // connection just closed uncleanly after delivery (common with HTTP/2 proxies).
-        if (!responseReceived) {
-          setShowTypingDots(false)
-          setActiveTools(new Set())
-          setMessages((prev) => [
-            ...prev,
-            { id: `err-${Date.now()}`, role: 'model', content: 'Something went wrong. Please try again.', displayContent: 'Something went wrong. Please try again.' },
-          ])
+        setSessionId(newSessionId)
+
+        const handleEvent = (event: AgentEvent) => {
+          switch (event.type) {
+            case 'tool_start':
+              setActiveTools((prev) => new Set([...prev, event.name]))
+              break
+            case 'tool_done':
+              setActiveTools((prev) => {
+                const next = new Set(prev)
+                next.delete(event.name)
+                return next
+              })
+              break
+            case 'response':
+              setShowTypingDots(false)
+              setActiveTools(new Set())
+              setMessages((prev) => [
+                ...prev,
+                { id: modelMsgId, role: 'model', content: event.text, displayContent: '', isTyping: true },
+              ])
+              startTypewriter(modelMsgId, event.text)
+              break
+            case 'error':
+              setShowTypingDots(false)
+              setActiveTools(new Set())
+              setMessages((prev) => [
+                ...prev,
+                { id: `err-${Date.now()}`, role: 'model', content: event.message, displayContent: event.message },
+              ])
+              break
+          }
         }
+
+        let cursor = 0
+        while (true) {
+          const result = await pollChat(jobId, cursor, useAuthStore.getState().accessToken!)
+          cursor = result.cursor
+          for (const event of result.events) handleEvent(event)
+          if (result.done) break
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      } catch {
+        setShowTypingDots(false)
+        setActiveTools(new Set())
+        setMessages((prev) => [
+          ...prev,
+          { id: `err-${Date.now()}`, role: 'model', content: 'Something went wrong. Please try again.', displayContent: 'Something went wrong. Please try again.' },
+        ])
       } finally {
         setStreaming(false)
         setShowTypingDots(false)

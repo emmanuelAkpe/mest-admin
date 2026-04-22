@@ -1,3 +1,5 @@
+import axios from 'axios'
+import { useAuthStore } from '@/store/auth'
 import { mest_server } from './server'
 
 const API_BASE = mest_server
@@ -16,64 +18,80 @@ export interface ChatSession {
   updatedAt: string
 }
 
-export type SSEEvent =
-  | { type: 'session'; sessionId: string }
+export type AgentEvent =
   | { type: 'tool_start'; name: string }
   | { type: 'tool_done'; name: string }
   | { type: 'response'; text: string }
   | { type: 'error'; message: string }
   | { type: 'done' }
+  | { type: 'ping' }
 
-export async function streamChat({
+async function refreshToken(): Promise<string> {
+  const { data } = await axios.post(`${mest_server}/auth/refresh`, {}, { withCredentials: true })
+  const newToken: string = data.data.accessToken
+  useAuthStore.getState().setAccessToken(newToken)
+  return newToken
+}
+
+async function authedFetch(url: string, options: RequestInit, token: string): Promise<Response> {
+  let res = await fetch(url, {
+    ...options,
+    headers: { ...(options.headers ?? {}), Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) {
+    try {
+      const newToken = await refreshToken()
+      res = await fetch(url, {
+        ...options,
+        headers: { ...(options.headers ?? {}), Authorization: `Bearer ${newToken}` },
+      })
+    } catch {
+      useAuthStore.getState().clearAuth()
+      window.location.href = '/login'
+      throw new Error('Session expired.')
+    }
+  }
+  return res
+}
+
+export async function startChat({
   message,
   sessionId,
   context,
   token,
-  onEvent,
 }: {
   message: string
   sessionId: string | null
   context: { cohortId?: string; eventId?: string; teamId?: string }
   token: string
-  onEvent: (event: SSEEvent) => void
-}): Promise<void> {
-  const response = await fetch(`${API_BASE}/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+}): Promise<{ jobId: string; sessionId: string }> {
+  const res = await authedFetch(
+    `${API_BASE}/chat`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, sessionId, context }),
     },
-    body: JSON.stringify({ message, sessionId, context }),
-  })
+    token
+  )
+  if (!res.ok) throw new Error('Failed to start chat.')
+  const json = await res.json()
+  return json.data
+}
 
-  if (!response.ok || !response.body) {
-    onEvent({ type: 'error', message: 'Failed to connect to Intelligence.' })
-    return
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const event = JSON.parse(line.slice(6)) as SSEEvent
-          onEvent(event)
-        } catch {
-          /* skip malformed */
-        }
-      }
-    }
-  }
+export async function pollChat(
+  jobId: string,
+  cursor: number,
+  token: string
+): Promise<{ events: AgentEvent[]; cursor: number; done: boolean }> {
+  const res = await authedFetch(
+    `${API_BASE}/chat/poll/${jobId}?cursor=${cursor}`,
+    {},
+    token
+  )
+  if (!res.ok) throw new Error('Poll failed.')
+  const json = await res.json()
+  return json.data
 }
 
 export async function listSessions(token: string): Promise<ChatSession[]> {
