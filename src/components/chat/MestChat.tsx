@@ -375,6 +375,7 @@ export function MestChat({
 
       let currentSessionId = sessionId
       const modelMsgId = `model-${Date.now()}`
+      let responseReceived = false
 
       try {
         await streamChat({
@@ -399,6 +400,7 @@ export function MestChat({
                 })
                 break
               case 'response':
+                responseReceived = true
                 setShowTypingDots(false)
                 setActiveTools(new Set())
                 setMessages((prev) => [
@@ -423,12 +425,16 @@ export function MestChat({
           },
         })
       } catch {
-        setShowTypingDots(false)
-        setActiveTools(new Set())
-        setMessages((prev) => [
-          ...prev,
-          { id: `err-${Date.now()}`, role: 'model', content: 'Something went wrong. Please try again.', displayContent: 'Something went wrong. Please try again.' },
-        ])
+        // Only show the error if we never received a response — if we did, the
+        // connection just closed uncleanly after delivery (common with HTTP/2 proxies).
+        if (!responseReceived) {
+          setShowTypingDots(false)
+          setActiveTools(new Set())
+          setMessages((prev) => [
+            ...prev,
+            { id: `err-${Date.now()}`, role: 'model', content: 'Something went wrong. Please try again.', displayContent: 'Something went wrong. Please try again.' },
+          ])
+        }
       } finally {
         setStreaming(false)
         setShowTypingDots(false)
