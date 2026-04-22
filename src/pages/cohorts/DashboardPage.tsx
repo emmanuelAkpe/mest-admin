@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   TrendingUp, TrendingDown, Minus, CalendarDays, Users, Network,
-  BarChart2, AlertTriangle, Star, Zap, CheckCircle2, Clock,
+  AlertTriangle, Star, Zap, CheckCircle2, Clock,
 } from 'lucide-react'
 import { cohortsApi } from '@/api/cohorts'
 import { eventsApi } from '@/api/events'
@@ -257,13 +257,6 @@ export function DashboardPage() {
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 Attention Required
               </h2>
-              <button
-                onClick={() => navigate(`/cohorts/${id}/analytics`)}
-                className="text-sm font-semibold hover:underline"
-                style={{ color: TEAL }}
-              >
-                View Analytics
-              </button>
             </div>
             <div className="divide-y divide-slate-100">
               {statsLoading ? (
@@ -399,7 +392,6 @@ export function DashboardPage() {
                 { icon: CalendarDays, label: 'Events', path: '/events' },
                 { icon: Users, label: 'Trainees', path: '/trainees' },
                 { icon: Network, label: 'Teams', path: '/teams' },
-                { icon: BarChart2, label: 'Analytics', path: `/cohorts/${id}/analytics` },
               ].map(({ icon: Icon, label, path }) => (
                 <button
                   key={label}
@@ -469,12 +461,6 @@ export function DashboardPage() {
                   </div>
                 </div>
               )}
-              <button
-                onClick={() => navigate(`/cohorts/${id}/analytics`)}
-                className="mt-6 w-full rounded bg-slate-50 py-2 text-xs font-bold uppercase tracking-widest text-slate-500 transition-colors hover:bg-slate-100"
-              >
-                Full Analytics
-              </button>
             </div>
           </div>
         </div>

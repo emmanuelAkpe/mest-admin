@@ -19,7 +19,6 @@ import { SubmitPage } from '@/pages/submissions/SubmitPage'
 import { EvaluatePage } from '@/pages/evaluate/EvaluatePage'
 import { CompleteProfilePage } from '@/pages/complete-profile/CompleteProfilePage'
 import { CompleteTeamPage } from '@/pages/complete-team/CompleteTeamPage'
-import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { TraineePortalPage } from '@/pages/trainee-portal/TraineePortalPage'
 import { TeamPortalPage } from '@/pages/team-portal/TeamPortalPage'
@@ -71,9 +70,7 @@ export default function App() {
         <Route index element={<Navigate to="/select-cohort" replace />} />
         <Route path="/cohorts" element={<CohortsPage />} />
         <Route path="/cohorts/:id" element={<DashboardPage />} />
-        <Route path="/cohorts/:id/analytics" element={<AnalyticsPage />} />
         <Route path="/cohorts/:id/programme-manager" element={<ProgrammeManagerPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/trainees" element={<TraineesPage />} />
         <Route path="/trainees/:id" element={<TraineeProfilePage />} />
         <Route path="/events" element={<EventsPage />} />

@@ -5,7 +5,6 @@ import {
   Users,
   Network,
   CalendarDays,
-  BarChart2,
   LogOut,
   ChevronDown,
   Menu,
@@ -30,7 +29,6 @@ const navItems = [
   { icon: Users, label: "Trainees", to: "/trainees" },
   { icon: Network, label: "Teams", to: "/teams" },
   { icon: CalendarDays, label: "Events", to: "/events" },
-  { icon: BarChart2, label: "Analytics", toAnalytics: true },
   { icon: Sparkles, label: "AI Manager", toProgrammeManager: true },
 ];
 
@@ -80,16 +78,12 @@ export function AppLayout() {
 
         <nav className="space-y-1">
           {navItems.map(
-            ({ icon: Icon, label, to, toCohort, toAnalytics, toProgrammeManager }: any) => {
+            ({ icon: Icon, label, to, toCohort, toProgrammeManager }: any) => {
               const href = toCohort
                 ? activeCohortId
                   ? `/cohorts/${activeCohortId}`
                   : "/select-cohort"
-                : toAnalytics
-                  ? activeCohortId
-                    ? `/cohorts/${activeCohortId}/analytics`
-                    : "/analytics"
-                  : toProgrammeManager
+                : toProgrammeManager
                     ? activeCohortId
                       ? `/cohorts/${activeCohortId}/programme-manager`
                       : "/select-cohort"
