@@ -195,19 +195,19 @@ function KpiCard({
         )}
       </div>
 
-      <div>
-        <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-          Comment {kpi.requireComment
-            ? <span className="text-red-400 ml-0.5">*</span>
-            : <span className="font-normal text-slate-400">(optional)</span>}
-        </label>
-        <textarea
-          rows={3} value={comment}
-          onChange={(e) => onChange(score, e.target.value)}
-          placeholder="Justify your score…"
-          className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
-        />
-      </div>
+      {kpi.requireComment && (
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+            Comment <span className="text-red-400 ml-0.5">*</span>
+          </label>
+          <textarea
+            rows={3} value={comment}
+            onChange={(e) => onChange(score, e.target.value)}
+            placeholder="Justify your score…"
+            className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-[#0d968b] focus:ring-1 focus:ring-[#0d968b]"
+          />
+        </div>
+      )}
     </div>
   )
 }
