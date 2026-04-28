@@ -76,6 +76,7 @@ export interface Event {
   startDate: string
   endDate: string
   status: EventStatus
+  pitchOrder: string[]
   createdBy: string | Admin
   createdAt: string
   updatedAt: string

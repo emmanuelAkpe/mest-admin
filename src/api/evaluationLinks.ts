@@ -45,6 +45,9 @@ export const evaluationLinksApi = {
   resend: (id: string) =>
     api.post<ApiResponse<null>>(`/evaluation-links/${id}/resend`),
 
+  extend: (id: string, expiresAt: string) =>
+    api.post<ApiResponse<EvaluationLink>>(`/evaluation-links/${id}/extend`, { expiresAt }),
+
   revoke: (id: string) =>
     api.delete<ApiResponse<null>>(`/evaluation-links/${id}`),
 

@@ -34,6 +34,7 @@ import {
   Bell,
   Download,
   LayoutGrid,
+  GripVertical,
 } from 'lucide-react'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { eventsApi } from '@/api/events'
@@ -1227,6 +1228,114 @@ function EvalStatusBadge({ status }: { status: EvaluationLinkStatus }) {
   )
 }
 
+/* ── Pitch order card ── */
+function PitchOrderCard({ eventId }: { eventId: string }) {
+  const queryClient = useQueryClient()
+
+  const { data: teamsData } = useQuery({
+    queryKey: ['event-teams', eventId],
+    queryFn: () => teamsApi.listByEvent(eventId),
+    staleTime: 30_000,
+  })
+  const { data: eventData } = useQuery({
+    queryKey: ['event', eventId],
+    queryFn: () => eventsApi.get(eventId),
+    staleTime: 30_000,
+  })
+
+  const allTeams: Team[] = (() => {
+    const raw = (teamsData?.data as { data?: unknown })?.data
+    return Array.isArray(raw) ? (raw as Team[]) : ((raw as { teams?: Team[] })?.teams ?? [])
+  })()
+
+  const savedOrder: string[] = (eventData?.data as { data?: { event?: { pitchOrder?: string[] } } })?.data?.event?.pitchOrder ?? []
+
+  const [ordered, setOrdered] = useState<Team[] | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+
+  const displayTeams: Team[] = ordered ?? (() => {
+    if (savedOrder.length === 0) return allTeams
+    const map = Object.fromEntries(allTeams.map((t) => [t.id, t]))
+    const sorted = savedOrder.map((id) => map[id]).filter(Boolean) as Team[]
+    const rest = allTeams.filter((t) => !savedOrder.includes(t.id))
+    return [...sorted, ...rest]
+  })()
+
+  const { mutate: savePitchOrder, isPending: saving } = useMutation({
+    mutationFn: (teamIds: string[]) => eventsApi.setPitchOrder(eventId, teamIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    },
+  })
+
+  const onDragStart = (i: number) => setDragIndex(i)
+
+  const onDragOver = (e: React.DragEvent, i: number) => {
+    e.preventDefault()
+    setOverIndex(i)
+  }
+
+  const onDrop = (i: number) => {
+    if (dragIndex === null || dragIndex === i) return
+    const next = [...displayTeams]
+    const [item] = next.splice(dragIndex, 1)
+    next.splice(i, 0, item)
+    setOrdered(next)
+    setSaved(false)
+    setDragIndex(null)
+    setOverIndex(null)
+  }
+
+  const onDragEnd = () => {
+    setDragIndex(null)
+    setOverIndex(null)
+  }
+
+  if (allTeams.length === 0) return null
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
+        <div>
+          <p className="text-sm font-bold text-slate-900">Pitch Order</p>
+          <p className="text-xs text-slate-400">Drag to set the order judges will see teams on their eval form</p>
+        </div>
+        <button
+          onClick={() => savePitchOrder(displayTeams.map((t) => t.id))}
+          disabled={saving}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+          style={{ backgroundColor: TEAL }}
+        >
+          {saving ? 'Saving…' : saved ? <><CheckCheck className="h-3.5 w-3.5" /> Saved</> : 'Save Order'}
+        </button>
+      </div>
+      <div className="divide-y divide-slate-50">
+        {displayTeams.map((team, i) => (
+          <div
+            key={team.id}
+            draggable
+            onDragStart={() => onDragStart(i)}
+            onDragOver={(e) => onDragOver(e, i)}
+            onDrop={() => onDrop(i)}
+            onDragEnd={onDragEnd}
+            className={`flex cursor-grab items-center gap-3 px-5 py-3 transition-colors active:cursor-grabbing ${
+              dragIndex === i ? 'opacity-40' : ''
+            } ${overIndex === i && dragIndex !== i ? 'bg-teal-50' : 'hover:bg-slate-50'}`}
+          >
+            <GripVertical className="h-4 w-4 shrink-0 text-slate-300" />
+            <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-400">{i + 1}</span>
+            <span className="flex-1 text-sm font-medium text-slate-800">{team.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Evaluations panel ── */
 function EvaluationsPanel({ eventId }: { eventId: string }) {
   const queryClient = useQueryClient()
@@ -1235,6 +1344,9 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
   const [resentId, setResentId] = useState<string | null>(null)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [resendError, setResendError] = useState<string | null>(null)
+  const [extendingId, setExtendingId] = useState<string | null>(null)
+  const [extendDateId, setExtendDateId] = useState<string | null>(null)
+  const [extendDate, setExtendDate] = useState('')
   const [activeView, setActiveView] = useState<'links' | 'results' | 'insights'>('links')
   const [exportingEvals, setExportingEvals] = useState(false)
   const [feedbackLink, setFeedbackLink] = useState<EvaluationLink | null>(null)
@@ -1274,6 +1386,19 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
   const { mutate: revoke } = useMutation({
     mutationFn: (id: string) => evaluationLinksApi.revoke(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['eval-links', eventId] }),
+  })
+
+  const { mutate: extendLink } = useMutation({
+    mutationFn: ({ id, expiresAt }: { id: string; expiresAt: string }) =>
+      evaluationLinksApi.extend(id, expiresAt),
+    onMutate: ({ id }) => setExtendingId(id),
+    onSuccess: () => {
+      setExtendingId(null)
+      setExtendDateId(null)
+      setExtendDate('')
+      queryClient.invalidateQueries({ queryKey: ['eval-links', eventId] })
+    },
+    onError: () => setExtendingId(null),
   })
 
   const { mutate: resendLink } = useMutation({
@@ -1338,6 +1463,8 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
           </button>
         </div>
       </div>
+
+      {activeView === 'links' && <PitchOrderCard eventId={eventId} />}
 
       {activeView === 'links' && (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -1443,6 +1570,37 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
                                   : resentId === link.id
                                     ? <><CheckCheck className="h-3 w-3 text-emerald-500" /> Sent</>
                                     : <><Send className="h-3 w-3" /> Resend</>}
+                              </button>
+                            )}
+                            {extendDateId === link.id ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="date"
+                                  value={extendDate}
+                                  min={new Date().toISOString().slice(0, 10)}
+                                  onChange={(e) => setExtendDate(e.target.value)}
+                                  className="rounded-md border border-slate-200 px-2 py-1 text-[11px] outline-none focus:border-[#0d968b]"
+                                />
+                                <button
+                                  disabled={!extendDate || !!extendingId}
+                                  onClick={() => extendLink({ id: link.id, expiresAt: new Date(extendDate + 'T23:59:59').toISOString() })}
+                                  className="rounded-md border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-[11px] font-semibold text-teal-700 transition-colors hover:bg-teal-100 disabled:opacity-60"
+                                >
+                                  {extendingId === link.id ? 'Saving…' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => { setExtendDateId(null); setExtendDate('') }}
+                                  className="rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-slate-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setExtendDateId(link.id); setExtendDate('') }}
+                                className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold transition-colors hover:bg-slate-50"
+                              >
+                                Extend
                               </button>
                             )}
                             <button

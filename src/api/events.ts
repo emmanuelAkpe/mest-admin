@@ -31,6 +31,9 @@ export const eventsApi = {
   update: (id: string, payload: Partial<CreateEventPayload>) =>
     api.put<ApiResponse<{ event: Event }>>(`/events/${id}`, payload),
 
+  setPitchOrder: (id: string, teamIds: string[]) =>
+    api.put<ApiResponse<{ event: Event }>>(`/events/${id}/pitch-order`, { teamIds }),
+
   listByParent: (parentEventId: string) =>
     api.get<ApiResponse<Event[]>>(`/events/${parentEventId}/sessions`),
 }
