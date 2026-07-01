@@ -60,6 +60,12 @@ export const teamsApi = {
   sendPortalInvite: (id: string) =>
     api.post<ApiResponse<{ sentTo: number }>>(`/teams/${id}/portal-invite`),
 
+  // Blast portal access invites to every active team in an event.
+  sendEventPortalInvites: (eventId: string) =>
+    api.post<ApiResponse<{ totalSent: number; teams: { teamId: string; teamName: string; sentTo: number }[] }>>(
+      `/events/${eventId}/teams/portal-invites`,
+    ),
+
   // Mentor sessions
   listMentorSessions: (teamId: string) =>
     api.get<ApiResponse<MentorSession[]>>(`/teams/${teamId}/mentor-sessions`),

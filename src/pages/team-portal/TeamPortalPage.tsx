@@ -342,6 +342,7 @@ function EvaluatorCard({ evaluator, index }: { evaluator: TeamPortalEvaluator; i
   const expertAvg = scoredKpis.length > 0
     ? Math.round(scoredKpis.reduce((acc, k) => acc + (k.score! / k.scaleMax * 10), 0) / scoredKpis.length * 10) / 10
     : null
+  const displayName = evaluator.name || `Expert ${index + 1}`
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -349,10 +350,10 @@ function EvaluatorCard({ evaluator, index }: { evaluator: TeamPortalEvaluator; i
         onClick={() => setExpanded((v) => !v)}
         className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors"
       >
-        <img src={avatarUrl} alt={`Expert ${index + 1}`} className="h-10 w-10 shrink-0 rounded-full border-2 border-white shadow-sm bg-slate-100" />
+        <img src={avatarUrl} alt={displayName} className="h-10 w-10 shrink-0 rounded-full border-2 border-white shadow-sm bg-slate-100" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-bold text-slate-800">Expert {index + 1}</p>
+            <p className="truncate text-sm font-bold text-slate-800">{displayName}</p>
             {expertAvg !== null && (
               <span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ backgroundColor: TEAL }}>
                 {expertAvg}/10
@@ -603,9 +604,10 @@ function EventCard({ entry, token, onRefresh }: { entry: TeamPortalEvent; token:
 
 function PortalView({ token, onLogout }: { token: string; onLogout: () => void }) {
   const queryClient = useQueryClient()
+  const [selectedTeamId, setSelectedTeamId] = useState<string | undefined>(undefined)
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['team-portal', token],
-    queryFn: () => teamPortalApi.getMe(token),
+    queryKey: ['team-portal', token, selectedTeamId],
+    queryFn: () => teamPortalApi.getMe(token, selectedTeamId),
     retry: (count, err: unknown) => {
       const status = (err as { response?: { status?: number } })?.response?.status
       if (status === 401) return false
@@ -638,7 +640,8 @@ function PortalView({ token, onLogout }: { token: string; onLogout: () => void }
   const portal = (data?.data as { data?: TeamPortalData })?.data
   if (!portal) return null
 
-  const { team, events, mentorSessions } = portal
+  const { team, teams, events, mentorSessions } = portal
+  const hasMultipleTeams = (teams?.length ?? 0) > 1
 
   async function handleLogout() {
     try { await teamPortalApi.logout(token) } catch { /* ignore */ }
@@ -648,24 +651,43 @@ function PortalView({ token, onLogout }: { token: string; onLogout: () => void }
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Nav */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg text-[11px] font-black text-white" style={{ backgroundColor: TEAL }}>M</div>
-          <span className="text-sm font-bold text-slate-900">Team Portal</span>
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:gap-3 sm:px-6 sm:py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black text-white" style={{ backgroundColor: TEAL }}>M</div>
+          <span className="truncate text-sm font-bold text-slate-900">Team Portal</span>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800">
-          <LogOut className="h-3.5 w-3.5" /> Sign out
-        </button>
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          {hasMultipleTeams && (
+            <div className="relative min-w-0">
+              <select
+                value={team.id}
+                onChange={(e) => setSelectedTeamId(e.target.value)}
+                aria-label="Switch team"
+                className="w-full max-w-[45vw] cursor-pointer appearance-none truncate rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm outline-none focus:border-slate-300 sm:max-w-[240px]"
+              >
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.event ? ` · ${t.event.name}` : ''}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            </div>
+          )}
+          <button onClick={handleLogout} className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800">
+            <LogOut className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Sign out</span>
+          </button>
+        </div>
       </div>
 
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
+      <div className="mx-auto max-w-3xl space-y-6 px-3 py-6 sm:px-4 sm:py-8">
 
         {/* Team identity */}
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="px-6 py-5" style={{ background: `linear-gradient(135deg, ${TEAL}12 0%, transparent 60%)` }}>
+          <div className="px-4 py-4 sm:px-6 sm:py-5" style={{ background: `linear-gradient(135deg, ${TEAL}12 0%, transparent 60%)` }}>
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{team.name}</h1>
+              <div className="min-w-0">
+                <h1 className="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">{team.name}</h1>
                 {team.cohort && (
                   <p className="mt-0.5 text-xs text-slate-500">{team.cohort.name}{team.cohort.year ? ` · ${team.cohort.year}` : ''}</p>
                 )}
@@ -695,7 +717,7 @@ function PortalView({ token, onLogout }: { token: string; onLogout: () => void }
 
           {/* Members */}
           {team.members.length > 0 && (
-            <div className="border-t border-slate-100 px-6 py-4">
+            <div className="border-t border-slate-100 px-4 py-4 sm:px-6">
               <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-slate-400">Team Members</p>
               <div className="flex flex-wrap gap-2">
                 {team.members.map((m, i) => (

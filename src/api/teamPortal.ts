@@ -11,6 +11,7 @@ export interface TeamPortalKpi {
 }
 
 export interface TeamPortalEvaluator {
+  name: string | null
   seed: string
   overallComment: string | null
   kpiScores: { kpiName: string; score: number | null; scaleMax: number; comment: string | null; recommendation: string | null }[]
@@ -57,6 +58,13 @@ export interface TeamPortalMember {
   roles: string[]
 }
 
+export interface TeamPortalTeamSummary {
+  id: string
+  name: string
+  event: { id: string; name: string; type: string; startDate: string } | null
+  isCurrent: boolean
+}
+
 export interface TeamPortalData {
   team: {
     id: string
@@ -70,6 +78,7 @@ export interface TeamPortalData {
     mentor: { firstName: string; lastName: string } | null
     pivots: { type: string; description: string; reason: string | null; wasProactive: boolean; createdAt: string }[]
   }
+  teams: TeamPortalTeamSummary[]
   events: TeamPortalEvent[]
   mentorSessions: { date: string; notes: string | null; actionItems: string[]; mentorFirstName: string | null }[]
 }
@@ -85,8 +94,11 @@ export const teamPortalApi = {
   verifyOtp: (email: string, otp: string) =>
     publicApi.post<ApiResponse<{ accessToken: string; email: string }>>('/team-portal/verify-otp', { email, otp }),
 
-  getMe: (token: string) =>
-    publicApi.get<ApiResponse<TeamPortalData>>('/team-portal/me', portalHeaders(token)),
+  getMe: (token: string, teamId?: string) =>
+    publicApi.get<ApiResponse<TeamPortalData>>(
+      teamId ? `/team-portal/me?teamId=${teamId}` : '/team-portal/me',
+      portalHeaders(token),
+    ),
 
   logout: (token: string) =>
     publicApi.post('/team-portal/logout', {}, portalHeaders(token)),

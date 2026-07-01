@@ -48,7 +48,6 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { CreateEventModal } from './CreateEventModal'
 import { GenerateEvaluationLinkModal } from './GenerateEvaluationLinkModal'
 import { EvalFeedbackModal } from './EvalFeedbackModal'
-import { SendFeedbackPreviewModal } from './SendFeedbackPreviewModal'
 import { CreateDeliverableModal } from './CreateDeliverableModal'
 import type { Event, EventStatus, EventType, Team, TeamStatus, Kpi, ScaleType, KpiAppliesTo, EvaluationLink, EvaluationLinkStatus, Deliverable, SubmissionLink, Cohort } from '@/types'
 
@@ -1350,7 +1349,11 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
   const [activeView, setActiveView] = useState<'links' | 'results' | 'insights'>('links')
   const [exportingEvals, setExportingEvals] = useState(false)
   const [feedbackLink, setFeedbackLink] = useState<EvaluationLink | null>(null)
-  const [showSendPreview, setShowSendPreview] = useState(false)
+
+  const { mutate: sendPortalInvites, isPending: sendingInvites, isSuccess: invitesSent, data: inviteResult } = useMutation({
+    mutationFn: () => teamsApi.sendEventPortalInvites(eventId),
+  })
+  const invitedCount = (inviteResult?.data as { data?: { totalSent?: number } })?.data?.totalSent ?? 0
 
   const { data: linksData, isLoading: linksLoading } = useQuery({
     queryKey: ['eval-links', eventId],
@@ -1448,10 +1451,13 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
         <div className="flex items-center gap-2">
           {hasSubmissions && (
             <button
-              onClick={() => setShowSendPreview(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+              onClick={() => sendPortalInvites()}
+              disabled={sendingInvites}
+              title="Email every team a link to their portal so they can view their evaluation."
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
             >
-              <Send className="h-3.5 w-3.5" /> Send to Teams
+              <Send className="h-3.5 w-3.5" />
+              {sendingInvites ? 'Sending…' : invitesSent ? `Sent to ${invitedCount}` : 'Send Portal Access'}
             </button>
           )}
           <button
@@ -1725,14 +1731,6 @@ function EvaluationsPanel({ eventId }: { eventId: string }) {
         <EvalFeedbackModal
           link={feedbackLink}
           onClose={() => setFeedbackLink(null)}
-        />
-      )}
-
-      {showSendPreview && (
-        <SendFeedbackPreviewModal
-          eventId={eventId}
-          teamIds={results?.teamResults.map((t) => t.teamId) ?? []}
-          onClose={() => setShowSendPreview(false)}
         />
       )}
     </div>
